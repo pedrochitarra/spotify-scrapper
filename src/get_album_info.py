@@ -1,12 +1,22 @@
+"""Save albums info in the database."""
 import requests
-import json
-import pandas as pd
-from bs4 import BeautifulSoup
+
 import psycopg2
 
 
-def save_albums_info(albums_ids, connection, headers_api, headers_browser):
+def save_albums_info(albums_ids: list,
+                     connection: psycopg2.extensions.connection,
+                     headers_api: dict):
+    """Save albums info in the database. By the albums_ids, make a request
+    to the API and save the info in the database defined in the connection
+    parameter. The headers_api is the headers to make a request to the API.
 
+    Args:
+        albums_ids (list): List of albums ids from the Spotify API.
+        connection (psycopg2.extensions.connection): Connection to the
+            database.
+        headers_api (dict): Headers to make a request to the API.
+    """
     # For every 20 albums, concat the elements in a string with commas
     # and make a request to the API
     for i in range(0, len(albums_ids), 20):

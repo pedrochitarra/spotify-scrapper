@@ -1,12 +1,13 @@
 """Script to gather information about popular playlists in Brazil from
 Spotify API and insert into a database."""
 import requests
-import json
+
 import pandas as pd
 import psycopg2
 
 
-def save_playlists_info(connection, headers_api: dict):
+def save_playlists_info(connection: psycopg2.extensions.connection,
+                        headers_api: dict):
     """Get information about popular playlists in Brazil from Spotify API and
     insert into a database."""
     # Get The Sounds of Spotify Cities playlists. It gathers many cities around
@@ -31,8 +32,8 @@ def save_playlists_info(connection, headers_api: dict):
         ).json()
         for playlist in sounds_cities["items"]:
             # Keep only playlists with "viral" in the name and ending in "BR"
-            if "viral" in playlist["name"].lower() and \
-                playlist["name"].endswith("BR"):
+            if ("viral" in playlist["name"].lower() and
+                    playlist["name"].endswith("BR")):
                 df_cities_playlists = pd.concat([
                     df_cities_playlists,
                     pd.DataFrame({

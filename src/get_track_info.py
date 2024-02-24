@@ -1,15 +1,25 @@
+"""Functions to get and save track info from Spotify API."""
 import requests
-import json
-import pandas as pd
-from bs4 import BeautifulSoup
+
 import psycopg2
+
 import src.get_artist_info as get_artist_info
 import src.get_album_info as get_album_info
-import time
 
 
-def insert_artist_playlist(connection, cursor,
+def insert_artist_playlist(connection: psycopg2.extensions.connection,
+                           cursor: psycopg2.extensions.cursor,
                            playlist_id: str, artist_id: str):
+    """Insert artist and the playlist relationship in the database.
+
+    Args:
+        connection: psycopg2.extensions.connection: Connection to
+            the database.
+        cursor: psycopg2.extensions.cursor: Cursor to execute
+            commands in the database.
+        playlist_id: str: Playlist id.
+        artist_id: str: Artist id.
+    """
     cursor.execute(
         f"""SELECT * FROM spotify.apy_artistaplaylist
         WHERE apy_art_codigo = '{artist_id}'
@@ -40,9 +50,22 @@ def insert_artist_playlist(connection, cursor,
 
 
 def save_tracks_info(track_ids: str, playlist_id: str,
-                     connection, headers_api: dict,
+                     connection: psycopg2.extensions.connection,
+                     headers_api: dict,
                      headers_browser: dict, socialblade_cookie: str):
+    """Save tracks info into the database.
 
+    Args:
+        track_ids: str: List of track ids.
+        playlist_id: str: Playlist id.
+        connection: psycopg2.extensions.connection: Connection to
+            the database.
+        headers_api: dict: Headers to make requests to the Spotify API.
+        headers_browser: dict: Headers to make requests to the Spotify
+            API.
+        socialblade_cookie: str: Cookie to make requests to the
+            SocialBlade API.
+    """
     # For every 50 tracks, concat the elements in a string with commas
     # and make a request to the API
     for i in range(0, len(track_ids), 50):
@@ -94,14 +117,21 @@ def save_tracks_info(track_ids: str, playlist_id: str,
                     # not be in artist_playlist
                     for artist_id in artists_ids:
                         print(
-                            f"\t Inserting artist {artist_id} into artist_playlist")
+                            (f"\t Inserting artist {artist_id} "
+                             "into artist_playlist"))
                         # Insert artists_playlists info
                         insert_artist_playlist(
                             connection, cursor, playlist_id, artist_id)
 
                 elif cursor.rowcount == 0:
+                    # Gather info from browser in order to get the playcount
                     general_track_info = requests.get(
-                        f"https://api-partner.spotify.com/pathfinder/v1/query?operationName=getTrack&variables=%7B%22uri%22%3A%22spotify%3Atrack%3A{track_id}%22%7D&extensions=%7B%22persistedQuery%22%3A%7B%22version%22%3A1%2C%22sha256Hash%22%3A%22e101aead6d78faa11d75bec5e36385a07b2f1c4a0420932d374d89ee17c70dd6%22%7D%7D",
+                        ("https://api-partner.spotify.com/pathfinder/v1/query"
+                         "?operationName=getTrack&variables=%7B%22uri%22%3A"
+                         f"%22spotify%3Atrack%3A{track_id}%22%7D&extensions=%"
+                         "7B%22persistedQuery%22%3A%7B%22version%22%3A1%2C%22"
+                         "sha256Hash%22%3A%22e101aead6d78faa11d75bec5e36385a07"
+                         "b2f1c4a0420932d374d89ee17c70dd6%22%7D%7D"),
                         headers=headers_browser)
 
                     if general_track_info.status_code != 200:
@@ -123,8 +153,7 @@ def save_tracks_info(track_ids: str, playlist_id: str,
                         ('{track_id}', '{track_name.replace("'", '')}',
                         {track_explicit}, {track_popularity}, {track_duration},
                         {play_count})
-                        ON CONFLICT (fai_codigo) DO NOTHING
-                        ;
+                        ON CONFLICT (fai_codigo) DO NOTHING;
                         """
                     )
                     connection.commit()

@@ -1,16 +1,29 @@
+"""Functions to get artist info from the Spotify API and save it in the
+database. Also here are functions to get the number of followers from
+social media and save it in the database."""
+from typing import Union
 import requests
-import json
-import pandas as pd
-from bs4 import BeautifulSoup
+
 import psycopg2
+
 import src.get_album_info as get_album_info
 
 
-def get_insta_followers_livecounts_nl(username):
+def get_insta_followers_livecounts_nl(username: str) -> Union[int, None]:
+    """Get the number of followers from the Instagram username using the
+    livecounts.nl website.
+
+    Args:
+        username (str): Instagram username.
+    Returns:
+        int: Number of followers.
+    """
     response = requests.get(
         f"https://backend.mixerno.space/instagram/test/{username}",
         headers={
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"}
+            "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                           "AppleWebKit/537.36 (KHTML, like Gecko) "
+                           "Chrome/119.0.0.0 Safari/537.36")}
     )
     if response.status_code == 200:
         followers = response.json()["user"]["followerCount"]
@@ -21,7 +34,14 @@ def get_insta_followers_livecounts_nl(username):
         return None
 
 
-def get_insta_followers_instrack(username):
+def get_insta_followers_instrack(username: str) -> Union[int, None]:
+    """Get the number of followers from the Instagram username using the
+    instrack.app website.
+
+    Args:
+        username (str): Instagram username.
+    Returns:
+        int: Number of followers."""
     response = requests.get(
         f"https://instrack.app/api/account/{username}",
         headers={
@@ -38,7 +58,15 @@ def get_insta_followers_instrack(username):
         return None
 
 
-def get_insta_followers_tucktools(username):
+def get_insta_followers_tucktools(username: str) -> Union[int, None]:
+    """Get the number of followers from the Instagram username using the
+    tucktools.com website.
+
+    Args:
+        username (str): Instagram username.
+    Returns:
+        int: Number of followers.
+    """
     response = requests.get(
         f"https://instaskull.com/tucktools_new?username={username}",
         headers={
@@ -63,49 +91,32 @@ def get_insta_followers_tucktools(username):
     return followers
 
 
-def extract_socialmedia_followers(username: str, socialmedia: str,
-                                  socialblade_cookie: str) -> int:
-    # TODO: Encontrar forma de extrair o número de seguidores do facebook
+def extract_socialmedia_followers(username: str,
+                                  socialmedia: str) -> Union[int, None]:
+    """Extract the number of followers from the social media username.
+
+    Args:
+        username (str): Social media username.
+        socialmedia (str): Social media name.
+    Returns:
+        int: Number of followers.
+    """
     if socialmedia == "facebook":
         # # For now, do nothing for facebook.
-        # response = requests.get(
-        #     f"https://socialblade.com/facebook/page/{username}/",
-        #     headers={
-        #         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36",
-        #         "Cookie": "PHPSESSXX=h22ofj9bn5e98ho1n3e8agn8u8",
-        #         "Referer": "https://socialblade.com/"
-        #     })
-        # print("facebook", response.status_code)
-        # if response.status_code != 200:
-        #     print("Error in request socialblade")
-        #     print(response.status_code)
-        # html = BeautifulSoup(response.content, "html.parser")
-        # paragraphs = html.find_all("p")
-        # for paragraph in paragraphs:
-        #     if "page likes" in paragraph.text:
-        #         print(paragraph)
-        #         # Extract digits from string
-        #         likes = int("".join([ele for ele in
-        #                              paragraph.text if ele.isdigit()]))
-        #         print("facebook", likes)
-        #         return likes
         pass
     # ! Get cookie every time we restart the kernel
     elif socialmedia in ["twitter"]:
-        # https://livecounts.io/twitter-live-follower-counter/
-        # https://socialcounts.org/twitter-live-follower-count/
-
-        # Alternative:
-        # https://socialcounts.org/_next/data/OynEq0Qj5drZPg6PG2EKL/twitter-live-follower-count/username.json?media=twitter-live-follower-count&id=username
-        # [pageProps][counters][0]
         response = requests.get(
-            f"https://api.livecounts.io/twitter-live-follower-counter/stats/{username}",
+            (f"https://api.livecounts.io/twitter-live-follower-counter"
+             f"/stats/{username}"),
             headers={
                 "Host": "api.livecounts.io",
                 "Origin": "https://livecounts.io",
                 "Referer": "https://livecounts.io/",
                 "Sec-Fetch-Site": "cross-site",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"}
+                "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                               "AppleWebKit/537.36 (KHTML, like Gecko) "
+                               "Chrome/119.0.0.0 Safari/537.36")}
         )
         if response.status_code != 200:
             print("Error in request response")
@@ -130,7 +141,16 @@ def extract_socialmedia_followers(username: str, socialmedia: str,
         return followers
 
 
-def save_socials_info(artist_id: str, links: list, connection):
+def save_socials_info(artist_id: str, links: list,
+                      connection: psycopg2.extensions.connection):
+    """Save social media info in the database.
+
+    Args:
+        artist_id (str): Artist id from the Spotify API.
+        links (list): List of social media links from the Spotify API.
+        connection (psycopg2.extensions.connection): Connection to the
+            database.
+    """
     for external_link in links:
         social = external_link["name"].lower()
 
@@ -149,11 +169,18 @@ def save_socials_info(artist_id: str, links: list, connection):
         connection.commit()
 
 
-def save_social_media_followers(connection, socialblade_cookie):
-    # Select * from soc_redesocial where soc_seguidores = 0;
+def save_social_media_followers(connection: psycopg2.extensions.connection):
+    """Save the number of followers from the social media in the database.
+
+    Args:
+        connection (psycopg2.extensions.connection): Connection to the
+            database.
+        socialblade_cookie (str): Cookie to make a request to the
+            socialblade website.
+    """
     cursor = connection.cursor()
     cursor.execute(
-        f"""SELECT soc_art_codigo, soc_url, soc_tipo
+        """SELECT soc_art_codigo, soc_url, soc_tipo
         FROM spotify.soc_redesocial
         WHERE soc_seguidores = 0
         AND soc_tipo != 'facebook'
@@ -175,9 +202,10 @@ def save_social_media_followers(connection, socialblade_cookie):
             username = username.split("/")[0]
 
             followers = extract_socialmedia_followers(
-                username, socialmedia, socialblade_cookie)
+                username, socialmedia)
             print(
-                f"Username: {username} Social: {socialmedia} Followers: {followers}",
+                f"Username: {username} Social: {socialmedia}",
+                f"Followers: {followers}",
                 f"URL: {social[1]}")
             if followers is not None:
                 cursor = connection.cursor()
@@ -192,7 +220,10 @@ def save_social_media_followers(connection, socialblade_cookie):
             cursor.close()
 
 
-def save_genres_info(artist_id, genres, connection, cursor):
+def save_genres_info(artist_id: str, genres: list,
+                     connection: psycopg2.extensions.connection,
+                     cursor: psycopg2.extensions.cursor):
+    """Save musical genres info in the database."""
     inserted_genres = []
     # TODO: Instead of using inserted genres, insert the genre and then find
     # its id by the name and save into the table.
@@ -231,7 +262,10 @@ def save_genres_info(artist_id, genres, connection, cursor):
         connection.commit()
 
 
-def save_cities_info(artist_id, cities, connection, cursor):
+def save_cities_info(artist_id: str, cities: list,
+                     connection: psycopg2.extensions.connection,
+                     cursor: psycopg2.extensions.cursor):
+    """Save cities info and artists related in the database."""
     inserted_cities = []
     for city in cities:
         cursor.execute(
@@ -248,27 +282,6 @@ def save_cities_info(artist_id, cities, connection, cursor):
         if cursor.rowcount > 0:
             inserted_cities.append(cursor.fetchone())
         connection.commit()
-
-
-    # for city in inserted_cities:
-    #     # Get city from inserted_cities where city, country
-    #     # and region match
-    #     for top_city in cities:
-    #         if top_city["city"] == city[1] and \
-    #                 top_city["country"] == city[2] and \
-    #                     top_city["region"] == city[3]:
-    #             listeners = top_city["numberOfListeners"]
-
-    #     cursor.execute(
-    #         f"""INSERT INTO spotify.arc_artistacidade
-    #         (arc_art_codigo, arc_cid_codigo, arc_ouvintes)
-    #         VALUES
-    #         ('{artist_id}', '{city[0]}', {listeners})
-    #         ON CONFLICT (arc_art_codigo, arc_cid_codigo)
-    #         DO NOTHING;
-    #         """
-    #     )
-    #     connection.commit()
 
     # Insert artists_cities info
     # TODO: Instead of using inserted cities, insert the city and then find
@@ -294,10 +307,19 @@ def save_cities_info(artist_id, cities, connection, cursor):
         connection.commit()
 
 
-def save_artists_info(artist_ids: list, connection,
-                      headers_api: str, headers_browser: str,
-                      socialblade_cookie: str):
+def save_artists_info(artist_ids: list,
+                      connection: psycopg2.extensions.connection,
+                      headers_api: dict, headers_browser: str):
+    """Save artists info in the database. By the artist_ids, make a request
+    to the API and save the info in the database defined in the connection
+    parameter. The headers_api is the headers to make a request to the API.
 
+    Args:
+        artist_ids (list): List of artists ids from the Spotify API.
+        connection (psycopg2.extensions.connection): Connection to the
+            database.
+        headers_api (dict): Headers to make a request to the API.
+    """
     # For every 50 artists, concat the elements in a string with commas
     # and make a request to the API
     for i in range(0, len(artist_ids), 50):
@@ -334,7 +356,14 @@ def save_artists_info(artist_ids: list, connection,
                     print(f"\t Artist {artist_id} already in the database.")
                 elif cursor.rowcount == 0:
                     general_artist_info_response = requests.get(
-                        f"https://api-partner.spotify.com/pathfinder/v1/query?operationName=queryArtistOverview&variables=%7B%22uri%22%3A%22spotify%3Aartist%3A{artist_id}%22%2C%22locale%22%3A%22intl-pt%22%2C%22includePrerelease%22%3Atrue%7D&extensions=%7B%22persistedQuery%22%3A%7B%22version%22%3A1%2C%22sha256Hash%22%3A%2235648a112beb1794e39ab931365f6ae4a8d45e65396d641eeda94e4003d41497%22%7D%7D",
+                        (f"https://api-partner.spotify.com/pathfinder/v1/"
+                         "query?operationName=queryArtistOverview&variables=%"
+                         f"7B%22uri%22%3A%22spotify%3Aartist%3A{artist_id}%"
+                         "22%2C%22locale%22%3A%22intl-pt%22%2C%22include"
+                         "Prerelease%22%3Atrue%7D&extensions=%7B%22"
+                         "persistedQuery%22%3A%7B%22version%22%3A1%2C%22sha"
+                         "256Hash%22%3A%2235648a112beb1794e39ab931365f6ae4a8d"
+                         "45e65396d641eeda94e4003d41497%22%7D%7D"),
                         headers=headers_browser)
                     if general_artist_info_response.status_code != 200:
                         print("Error in request general_artist_info_response")
@@ -342,7 +371,8 @@ def save_artists_info(artist_ids: list, connection,
                         print(general_artist_info_response.headers)
                     else:
                         general_artist_info_response = \
-                            general_artist_info_response.json()["data"]["artistUnion"]
+                            general_artist_info_response.json()[
+                                "data"]["artistUnion"]
 
                     stats = general_artist_info_response["stats"]
                     artist_monthly_listeners = stats["monthlyListeners"]
@@ -350,6 +380,8 @@ def save_artists_info(artist_ids: list, connection,
                         artist_monthly_listeners = 0
 
                     # Insert artist info
+                    art_ultimo_nome = " ".join(artist_name.split(
+                        " ")[1:]).replace("'", '')
                     cursor.execute(
                         f"""INSERT INTO spotify.art_artista
                         (art_codigo, art_primeironome, art_ultimonome,
@@ -357,7 +389,7 @@ def save_artists_info(artist_ids: list, connection,
                         VALUES
                         ('{artist_id}',
                         '{artist_name.split(' ')[0].replace("'", "")}',
-                        '{" ".join(artist_name.split(" ")[1:]).replace("'", '')}',
+                        '{art_ultimo_nome}',
                         {artist_followers},
                         {artist_popularity}, {artist_monthly_listeners})
                         ON CONFLICT (art_codigo) DO NOTHING;
@@ -374,7 +406,8 @@ def save_artists_info(artist_ids: list, connection,
                     save_cities_info(artist_id, cities, connection, cursor)
 
                     artist_albums_response = requests.get(
-                        f"https://api.spotify.com/v1/artists/{artist_id}/albums",
+                        (f"https://api.spotify.com/v1/artists/"
+                         f"{artist_id}/albums"),
                         headers=headers_api, params={"limit": 50, "offset": 0}
                     )
                     if artist_albums_response.status_code != 200:
@@ -422,9 +455,14 @@ def save_artists_info(artist_ids: list, connection,
                 cursor.close()
 
 
-# TODO: Run this after all the artists are inserted in the database.
-def save_related_artists_info(artist_id, connection, headers_api,
-                              headers_browser, socialblade_cookie):
+def save_related_artists_info(artist_id: str,
+                              connection: psycopg2.extensions.connection,
+                              headers_api: dict,
+                              headers_browser: dict):
+    """Save related artists info in the database. By the artist_id, make a
+    request to the API and save the info in the database defined in the
+    connection parameter. The headers_api is the headers to make a request
+    to the API. Run this after all the artists are inserted in the database."""
     cursor = connection.cursor()
     related_artists_response = requests.get(
         f"https://api.spotify.com/v1/artists/{artist_id}/related-artists",
@@ -453,12 +491,13 @@ def save_related_artists_info(artist_id, connection, headers_api,
 
     if len(related_artists_ids) > 0:
         print(
-            f"\tFound {len(related_artists_ids)} related artists for {artist_id}.")
+            (f"\tFound {len(related_artists_ids)} related "
+             "artists for {artist_id}."))
         save_artists_info(
-            related_artists_ids, connection, headers_api, headers_browser,
-            socialblade_cookie)
+            related_artists_ids, connection, headers_api, headers_browser)
     else:
-        print(f"\tAll related artists for {artist_id} already in the database.")
+        print(
+            f"\tAll related artists for {artist_id} already in the database.")
 
     print(f"\tSaving relationship between artists for artist {artist_id}.")
     for related_artist_id in save_related_artists_ids:
