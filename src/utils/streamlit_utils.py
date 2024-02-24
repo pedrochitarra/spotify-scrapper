@@ -32,7 +32,9 @@ def try_to_get_browser_image_url(item_id: str, item_type: str) -> str:
                     "User-Agent": (
                         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                         "AppleWebKit/537.36 (KHTML, like Gecko) "
-                        "Chrome/119.0.0.0 Safari/537.36")})
+                        "Chrome/119.0.0.0 Safari/537.36"),
+                    "Origin": "https://open.spotify.com",
+                    "Referer": "https://open.spotify.com/"})
             response = response.json()
             st.write(response)
             st.write(response.text)
