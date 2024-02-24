@@ -14,6 +14,8 @@ Welcome to the Spotify Scraper repository, an educational resource designed to p
 
 You can check a webapp for the data scrapped at [Spotify Scraper](https://spotify-showcase.streamlit.app/).
 
+<span style="color:red;"> ⚠️ Disclaimer: The data can contain some bad words and inappropriate names, since it's the name of the musics and artists, so be aware of that. </span>
+
 ## 🏁 Getting Started <a name = "getting_started"></a>
 The following link provide access to the official documentation for the Spotify Web API, which is the primary resource used to access and retrieve data from the Spotify platform. The documentation provides a comprehensive overview of the API's capabilities, including the various endpoints and methods available for accessing and retrieving data from the Spotify platform.
 
