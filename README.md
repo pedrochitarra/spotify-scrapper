@@ -12,7 +12,7 @@
 ## 🧐 About <a name = "about"></a>
 Welcome to the Spotify Scraper repository, an educational resource designed to provide insight into web scraping techniques and data extraction from the Spotify platform. This repository serves as a learning tool for individuals interested in understanding how to programmatically access and retrieve information from Spotify's vast database of music tracks, albums, artists, and playlists.
 
-You can check a webapp for the data scrapped at [Spotify Scraper](https://spotify-showcase.streamlit.app/).
+## You can check a webapp for the data scrapped at [Spotify Scraper](https://spotify-showcase.streamlit.app/).
 
 <span style="color:red;"> ⚠️ Disclaimer: The data can contain some bad words and inappropriate names, since it's the name of the musics and artists, so be aware of that. </span>
 
