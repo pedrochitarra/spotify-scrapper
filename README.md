@@ -12,6 +12,8 @@
 ## 🧐 About <a name = "about"></a>
 Welcome to the Spotify Scraper repository, an educational resource designed to provide insight into web scraping techniques and data extraction from the Spotify platform. This repository serves as a learning tool for individuals interested in understanding how to programmatically access and retrieve information from Spotify's vast database of music tracks, albums, artists, and playlists.
 
+You can check a webapp for the data scrapped at [Spotify Scraper](https://spotify-showcase.streamlit.app/).
+
 ## 🏁 Getting Started <a name = "getting_started"></a>
 The following link provide access to the official documentation for the Spotify Web API, which is the primary resource used to access and retrieve data from the Spotify platform. The documentation provides a comprehensive overview of the API's capabilities, including the various endpoints and methods available for accessing and retrieving data from the Spotify platform.
 
