@@ -2,3 +2,4 @@ pandas==1.5.3
 psycopg2_binary==2.9.5
 Requests==2.31.0
 streamlit
+st-pages==0.4.5
