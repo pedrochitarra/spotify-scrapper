@@ -19,12 +19,21 @@ def try_to_get_browser_image_url(item_id: str, item_type: str) -> str:
     """
     url = None
     try:
-        url = requests.get(
+        print(f"https://open.spotify.com/oembed?url="
+              f"https://open.spotify.com/{item_type}/{item_id}")
+        response = requests.get(
             f"https://open.spotify.com/oembed?url="
-            f"https://open.spotify.com/{item_type}/{item_id}").json()[
-                "thumbnail_url"]
-    except requests.exceptions.JSONDecodeError:
-        None
+            f"https://open.spotify.com/{item_type}/{item_id}",
+            headers={
+             "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                            "AppleWebKit/537.36 (KHTML, like Gecko) "
+                            "Chrome/119.0.0.0 Safari/537.36")})
+        response = response.json()
+        url = response["thumbnail_url"]
+        print(url)
+    except (requests.exceptions.JSONDecodeError, KeyError):
+        print(response, response.text)
+        url = None
     return url
 
 

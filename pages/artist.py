@@ -58,19 +58,20 @@ st.header("Artist Info")
 image_artist_col, text_info_col = st.columns(2)
 
 artist_image = None
-try:
-    # Request the browser information
-    browser_info = requests.get(
-        ("https://open.spotify.com/oembed?url="
-            f"https://open.spotify.com/artist/{artist_info[0]}"),
-        headers={
-            "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                           "AppleWebKit/537.36 (KHTML, like Gecko) "
-                           "Chrome/119.0.0.0 Safari/537.36")})
-    artist_image = browser_info.json()["thumbnail_url"]
-except requests.exceptions.JSONDecodeError:
-    print("Error: JSONDecodeError")
-    time.sleep(2)
+# try:
+#     # Request the browser information
+#     browser_info = requests.get(
+#         ("https://open.spotify.com/oembed?url="
+#             f"https://open.spotify.com/artist/{artist_info[0]}"),
+#         headers={
+#             "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+#                            "AppleWebKit/537.36 (KHTML, like Gecko) "
+#                            "Chrome/119.0.0.0 Safari/537.36")})
+#     artist_image = browser_info.json()["thumbnail_url"]
+# except requests.exceptions.JSONDecodeError:
+#     print("Error: JSONDecodeError")
+#     time.sleep(2)
+artist_image = st_utils.try_to_get_browser_image_url(artist_info[0], "artist")
 
 with image_artist_col:
     st.image(artist_image, width=300, use_column_width="auto")
