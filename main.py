@@ -1,11 +1,13 @@
 """Script to execute all steps to gather information about songs in Spotify
 and save in a database."""
+import json
+import requests
+
+import psycopg2
+
 import src.get_playlist_info as get_playlist_info
 import src.get_track_info as get_track_info
 import src.get_artist_info as get_artist_info
-import requests
-import json
-import psycopg2
 
 
 def main():
@@ -29,13 +31,14 @@ def main():
         host=host, port=port
     )
 
-    # Load spotify credentials and get token to execute requests
-    LYRICS_CREDENTIALS = "get_lyrics_credentials.json" #23695
-    TRACKS_CREDENTIALS = "get_tracks_credentials.json" #12198
-    MUSICS_CREDENTIALS = "get_musics_credentials.json" #7643
-    ALBUMS_CREDENTIALS = "get_albums_credentials.json" #16980
-    DISCS_CREDENTIALS = "get_discs_credentials.json" #66752
-    ARTISTS_CREDENTIALS = "get_artists_credentials.json" #71061
+    # Load spotify credentials and get token to execute requests. There are
+    # many credentials since the API has a limit of requests per second.
+    LYRICS_CREDENTIALS = "get_lyrics_credentials.json"
+    # TRACKS_CREDENTIALS = "get_tracks_credentials.json"
+    # MUSICS_CREDENTIALS = "get_musics_credentials.json"
+    # ALBUMS_CREDENTIALS = "get_albums_credentials.json"
+    # DISCS_CREDENTIALS = "get_discs_credentials.json"
+    # ARTISTS_CREDENTIALS = "get_artists_credentials.json"
     with open(LYRICS_CREDENTIALS, "r") as f:
         spotify_credentials = json.load(f)
 
@@ -101,9 +104,9 @@ def main():
             )
 
             # Select count from ply_playlist where ply_codigo = playlist_id
-            # If the amount of tracks related to the playlist is the same as the
-            # total number of tracks in the playlist, the playlist was already
-            # saved and the script can continue to the next playlist.
+            # If the amount of tracks related to the playlist is the same as
+            # the total number of tracks in the playlist, the playlist was
+            # already saved and the script can continue to the next playlist.
             cursor = conn.cursor()
             cursor.execute(
                 f"""SELECT count(1) FROM spotify.fxp_faixaplaylist
@@ -130,7 +133,7 @@ def main():
             if apy_count == 0:
                 print("apy_count == 0")
                 track_ids = [track["track"]["id"] for track in tracks
-                            if track["track"]]
+                             if track["track"]]
 
                 while tracks_response["next"] is not None:
                     tracks_response = requests.get(
@@ -138,7 +141,7 @@ def main():
                         headers=headers_api).json()
                     track_ids.extend(
                         [ele["track"]["id"] for ele in tracks_response["items"]
-                        if ele["track"]])
+                         if ele["track"]])
 
                 # Get track info
                 get_track_info.save_tracks_info(
@@ -184,7 +187,5 @@ def main():
     cursor.close()
 
 
-# TODO: Calcular a quantidade de vezes de cada artista em cada playlist
-# fazendo joins. Ao reexecutar varias vezes pode ter dado erro. Verificar.
 if __name__ == "__main__":
     main()
