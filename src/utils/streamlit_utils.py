@@ -36,6 +36,7 @@ def try_to_get_browser_image_url(item_id: str, item_type: str) -> str:
             response = response.json()
             st.write(response)
             st.write(response.text)
+            st.write(response.json())
             url = response["thumbnail_url"]
             st.write(url)
         except (requests.exceptions.JSONDecodeError, KeyError):
