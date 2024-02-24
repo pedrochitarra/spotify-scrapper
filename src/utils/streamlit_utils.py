@@ -22,7 +22,7 @@ def try_to_get_browser_image_url(item_id: str, item_type: str) -> str:
     retries = 0
     while not url and retries < 3:
         try:
-            logging.info(
+            st.write(
                 f"https://open.spotify.com/oembed?url="
                 f"https://open.spotify.com/{item_type}/{item_id}")
             response = requests.get(
@@ -34,10 +34,12 @@ def try_to_get_browser_image_url(item_id: str, item_type: str) -> str:
                         "AppleWebKit/537.36 (KHTML, like Gecko) "
                         "Chrome/119.0.0.0 Safari/537.36")})
             response = response.json()
+            st.write(response)
+            st.write(response.text)
             url = response["thumbnail_url"]
-            logging.info(url)
+            st.write(url)
         except (requests.exceptions.JSONDecodeError, KeyError):
-            logging.info(response, response.text)
+            st.write(response, response.text)
             url = None
             retries += 1
     return url
