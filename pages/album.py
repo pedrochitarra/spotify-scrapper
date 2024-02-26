@@ -18,12 +18,14 @@ include_singles = st.checkbox("Include singles", value=True)
 
 # List the artist's albums
 cursor.execute(
-    f"""SELECT alb_codigo, alb_nome, alb_lancamento, alb_tipo,
-    alb_popularidade
-    FROM alb_album
-    INNER JOIN aal_artistaalbum ON alb_codigo = aal_alb_codigo
-    INNER JOIN art_artista ON aal_art_codigo = art_codigo
-    WHERE aal_art_codigo = '{artist[0]}';""")
+    f"""SELECT alb.alb_codigo, alb.alb_nome, alb.alb_lancamento, alb.alb_tipo,
+    alb.alb_popularidade, alb_img.image_url
+    FROM alb_album alb
+    INNER JOIN aal_artistaalbum aal ON alb.alb_codigo = aal.aal_alb_codigo
+    INNER JOIN art_artista art ON aal.aal_art_codigo = art.art_codigo
+    INNER JOIN albums_images alb_img ON
+    alb_img.alb_codigo = alb.alb_codigo
+    WHERE aal.aal_art_codigo = '{artist[0]}';""")
 albums = cursor.fetchall()
 
 if not include_singles:
@@ -34,7 +36,11 @@ album = st.selectbox(
     'Select an album', albums,
     format_func=lambda x: x[1])
 
-album_image = st_utils.try_to_get_browser_image_url(album[0], "album")
+album_image = album[-1]
+
+if album_image is None:
+    album_image = ("https://i.scdn.co/image/"
+                   "ab6761610000517458efbed422ab46484466822b")
 
 image_album_col, text_info_col = st.columns(2)
 with image_album_col:

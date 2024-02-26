@@ -11,6 +11,7 @@ show_pages(
         Page("frontend.py", "Showcase", "🏠"),
         Page("pages/artist.py", "Artist", ":microphone:"),
         Page("pages/album.py", "Album", ":cd:"),
+        Page("pages/track.py", "Track", ":musical_note:"),
     ]
 )
 

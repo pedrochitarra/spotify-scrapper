@@ -4,8 +4,6 @@ import sqlite3
 from geopy.geocoders import Nominatim
 import pandas as pd
 
-import src.utils.streamlit_utils as st_utils
-
 
 st.title('Artists')
 
@@ -29,8 +27,10 @@ artist = st.selectbox(
 
 # Get the artist's info
 cursor.execute(f"""SELECT *
-                FROM art_artista
-                WHERE art_codigo = '{artist[0]}';""")
+                FROM art_artista art
+                INNER JOIN artists_images art_img
+                ON art.art_codigo = art_img.art_codigo
+                WHERE art.art_codigo = '{artist[0]}';""")
 artist_info = cursor.fetchone()
 
 artist_genre_info = cursor.execute(
@@ -55,7 +55,11 @@ st.header("Artist Info")
 image_artist_col, text_info_col = st.columns(2)
 
 artist_image = None
-artist_image = st_utils.try_to_get_browser_image_url(artist_info[0], "artist")
+artist_image = artist_info[7]
+
+if artist_image is None:
+    artist_image = ("https://i.scdn.co/image/"
+                    "ab6761610000517458efbed422ab46484466822b")
 
 with image_artist_col:
     st.image(artist_image, width=300, use_column_width="auto")
@@ -135,23 +139,22 @@ with st.spinner("Getting the geolocation of the cities..."):
 st.subheader("Top tracks")
 top_tracks = cursor.execute(
     f"""
-    SELECT fai_codigo, fai_nome, fai_popularidade, fai_reproducoes
-    FROM fai_faixa
+    SELECT ff.fai_codigo, ff.fai_nome, ff.fai_popularidade, ff.fai_reproducoes,
+    faixas_images.image_url
+    FROM fai_faixa ff
     INNER JOIN afx_artistafaixa
-    ON afx_artistafaixa.afx_fai_codigo = fai_faixa.fai_codigo
+    ON afx_artistafaixa.afx_fai_codigo = ff.fai_codigo
     INNER JOIN art_artista
     ON art_artista.art_codigo = afx_artistafaixa.afx_art_codigo
+    INNER JOIN faixas_images
+    ON ff.fai_codigo = faixas_images.fai_codigo
     WHERE afx_artistafaixa.afx_art_codigo = '{artist[0]}'
-    ORDER BY fai_popularidade DESC
+    ORDER BY ff.fai_popularidade DESC
     LIMIT 5;
     """).fetchall()
 top_tracks_df = pd.DataFrame(top_tracks,
                              columns=["ID", "Track", "Popularity (from 100)",
-                                      "Plays"])
-top_tracks_df["Image"] = top_tracks_df.apply(
-    lambda x: st_utils.try_to_get_browser_image_url(x["ID"], "track"), axis=1)
-
-# st.dataframe(top_tracks_df, hide_index=True)
+                                      "Plays", "Image"])
 
 st.data_editor(
     top_tracks_df,
@@ -167,20 +170,21 @@ st.data_editor(
 st.subheader("Top albums")
 top_albums = cursor.execute(
     f"""
-    SELECT alb_codigo, alb_nome, alb_popularidade
-    FROM alb_album
+    SELECT alb.alb_codigo, alb.alb_nome, alb.alb_popularidade,
+    albums_images.image_url
+    FROM alb_album alb
     INNER JOIN aal_artistaalbum
-    ON aal_artistaalbum.aal_alb_codigo = alb_album.alb_codigo
+    ON aal_artistaalbum.aal_alb_codigo = alb.alb_codigo
     INNER JOIN art_artista
     ON art_artista.art_codigo = aal_artistaalbum.aal_art_codigo
+    INNER JOIN albums_images
+    ON alb.alb_codigo = albums_images.alb_codigo
     WHERE aal_artistaalbum.aal_art_codigo = '{artist[0]}'
     ORDER BY alb_popularidade DESC
     LIMIT 5;
     """).fetchall()
-top_albums_df = pd.DataFrame(top_albums,
-                             columns=["ID", "Album", "Popularity (from 100)"])
-top_albums_df["Image"] = top_albums_df.apply(
-    lambda x: st_utils.try_to_get_browser_image_url(x["ID"], "album"), axis=1)
+top_albums_df = pd.DataFrame(
+    top_albums, columns=["ID", "Album", "Popularity (from 100)", "Image"])
 
 st.data_editor(
     top_albums_df,
@@ -202,15 +206,18 @@ st.write("Tip: since there are many artists, you can refresh the page to "
 order_by_popularity = st.checkbox("Order by popularity", value=False)
 order_query = None
 if order_by_popularity:
-    order_query = "art_popularidade DESC"
+    order_query = "art.art_popularidade DESC"
 else:
     order_query = "RANDOM()"
 
 related_artists = cursor.execute(
     f"""
-    SELECT art_codigo, art_primeironome, art_ultimonome, art_popularidade
-    FROM art_artista
-    WHERE art_codigo IN (
+    SELECT art.art_codigo, art.art_primeironome, art.art_ultimonome,
+    art.art_popularidade, art_img.image_url
+    FROM art_artista art
+    INNER JOIN artists_images art_img
+    ON art.art_codigo = art_img.art_codigo
+    WHERE art.art_codigo IN (
         SELECT aa_art_b_codigo
         FROM aa_artistaartista
         WHERE aa_art_a_codigo = '{artist[0]}'
@@ -221,9 +228,7 @@ related_artists = cursor.execute(
 
 related_artists_df = pd.DataFrame(
     related_artists, columns=["ID", "First Name", "Last Name",
-                              "Popularity (from 100)"])
-related_artists_df["Image"] = related_artists_df.apply(
-    lambda x: st_utils.try_to_get_browser_image_url(x["ID"], "artist"), axis=1)
+                              "Popularity (from 100)", "Image"])
 related_artists_df["Artist"] = related_artists_df.apply(
     lambda x: x["First Name"] + " " + x["Last Name"] if x["Last Name"] else
     x["First Name"], axis=1)
