@@ -1,6 +1,5 @@
 """Module with utility functions for Streamlit."""
 import requests
-import logging
 
 import streamlit as st
 import sqlite3
@@ -20,6 +19,8 @@ def try_to_get_browser_image_url(item_id: str, item_type: str) -> str:
     """
     url = None
     retries = 0
+    if item_type == "faixa":
+        item_type = "track"
     while not url and retries < 3:
         try:
             st.write(
@@ -36,13 +37,11 @@ def try_to_get_browser_image_url(item_id: str, item_type: str) -> str:
                     "Origin": "https://open.spotify.com",
                     "Referer": "https://open.spotify.com/"})
             response = response.json()
-            st.write(response)
-            st.write(response.text)
-            st.write(response.json())
             url = response["thumbnail_url"]
-            st.write(url)
+            print(url)
         except (requests.exceptions.JSONDecodeError, KeyError):
-            st.write(response, response.text)
+            # st.write(response, response.text)
+            print("Error!", response, "\n")
             url = None
             retries += 1
     return url
