@@ -118,11 +118,16 @@ with st.spinner("Getting the geolocation of the cities..."):
 
     for i, city in cities_df.iterrows():
         # st.write(city)
+        retries = 0
         city_name = f"{city['City'], city['Region'], city['Country']}"
-        local = get_geolocation(city_name)
-        # st.write(local)
-        cities_df.at[i, "latitude"] = local.latitude
-        cities_df.at[i, "longitude"] = local.longitude
+        while retries < 3:
+            # Retry 3 times to get the geolocation. If it fails, skip the city
+            try:
+                local = get_geolocation(city_name)
+                cities_df.at[i, "latitude"] = local.latitude
+                cities_df.at[i, "longitude"] = local.longitude
+            except AttributeError:
+                retries += 1
 
     cities_df_show_case = pd.DataFrame()
     cities_df_show_case["City"] = cities_df.apply(
@@ -133,8 +138,9 @@ with st.spinner("Getting the geolocation of the cities..."):
     # Normalize to 100 the listeners
     cities_df["Listeners"] = (100_000 * cities_df["Listeners"] /
                               cities_df["Listeners"].max())
+    # Before plotting, drop the cities with no geolocation
+    cities_df = cities_df.dropna(subset=["latitude", "longitude"])
     st.map(cities_df, size="Listeners", use_container_width=True)
-
 
 st.subheader("Top tracks")
 top_tracks = cursor.execute(
@@ -152,6 +158,7 @@ top_tracks = cursor.execute(
     ORDER BY ff.fai_popularidade DESC
     LIMIT 5;
     """).fetchall()
+
 top_tracks_df = pd.DataFrame(top_tracks,
                              columns=["ID", "Track", "Popularity (from 100)",
                                       "Plays", "Image"])
