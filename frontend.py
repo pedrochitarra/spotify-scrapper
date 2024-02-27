@@ -21,3 +21,25 @@ st.write("Welcome to the Spotify Showcase!"
          "trending in Brazil.")
 
 st.write("To start, select a page from the sidebar.")
+
+st.write(
+    "In the Artist page, you can see the artists "
+    "that are trending in Brazil and the information about them available "
+    "in the Spotify API. You can also see the albums and tracks of the "
+    "artist.")
+
+st.write(
+    "In the Album page, you can see the albums from the artists that are "
+    "trending in Brazil and the information about them available in the "
+    "Spotify API.")
+
+st.write(
+    "In the Track page, you can see the tracks from the artists that are "
+    "trending in Brazil and the information about them available in the "
+    "Spotify API.")
+
+st.markdown(
+    "<span style='color:red;'> ⚠️ Disclaimer: The data can contain some bad "
+    "words and inappropriate names, since it's the name of the musics and "
+    "artists, so be aware of that. </span>"
+)
