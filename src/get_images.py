@@ -71,7 +71,7 @@ def save_items_with_no_image(items: list, item_type: str,
     conn = sqlite3.connect('data/spotify.db')
     for item in tqdm(items):
         image_url = st_utils.try_to_get_browser_image_url(item, item_type)
-        print(image_url)
+        # print("Image URL: ", image_url)
         # Insert the image URL into the database
         try:
             cursor = conn.cursor()
