@@ -2,6 +2,8 @@
 import streamlit as st
 import sqlite3
 from geopy.geocoders import Nominatim
+from geopy.exc import GeocoderUnavailable
+
 import pandas as pd
 
 
@@ -119,14 +121,16 @@ with st.spinner("Getting the geolocation of the cities..."):
     for i, city in cities_df.iterrows():
         # st.write(city)
         retries = 0
+        geolocation_valid = False
         city_name = f"{city['City'], city['Region'], city['Country']}"
-        while retries < 3:
+        while retries < 3 and not geolocation_valid:
             # Retry 3 times to get the geolocation. If it fails, skip the city
             try:
                 local = get_geolocation(city_name)
                 cities_df.at[i, "latitude"] = local.latitude
                 cities_df.at[i, "longitude"] = local.longitude
-            except AttributeError:
+                geolocation_valid = True
+            except (AttributeError, GeocoderUnavailable):
                 retries += 1
 
     cities_df_show_case = pd.DataFrame()
@@ -140,7 +144,10 @@ with st.spinner("Getting the geolocation of the cities..."):
                               cities_df["Listeners"].max())
     # Before plotting, drop the cities with no geolocation
     cities_df = cities_df.dropna(subset=["latitude", "longitude"])
-    st.map(cities_df, size="Listeners", use_container_width=True)
+    if cities_df.empty:
+        st.error("No geolocation was found for the cities")
+    else:
+        st.map(cities_df, size="Listeners", use_container_width=True)
 
 st.subheader("Top tracks")
 top_tracks = cursor.execute(
