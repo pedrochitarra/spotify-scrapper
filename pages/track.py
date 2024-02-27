@@ -73,7 +73,8 @@ playlists = cursor.execute(
     ON fxp.fxp_ply_codigo = ply.ply_codigo
     INNER JOIN playlists_images ply_img
     ON ply_img.ply_codigo = ply.ply_codigo
-    WHERE fxp.fxp_fai_codigo = '{track[0]}';
+    WHERE fxp.fxp_fai_codigo = '{track[0]}'
+    ORDER BY ply.ply_seguidores desc;
     """).fetchall()
 
 playlists_df = pd.DataFrame(
