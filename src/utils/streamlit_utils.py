@@ -38,12 +38,16 @@ def try_to_get_browser_image_url(item_id: str, item_type: str) -> str:
                     "Referer": "https://open.spotify.com/"})
             response = response.json()
             url = response["thumbnail_url"]
-            print(url)
         except (requests.exceptions.JSONDecodeError, KeyError):
             # st.write(response, response.text)
-            print("Error!", response, "\n")
-            url = None
-            retries += 1
+            # Default image
+            if retries == 2:
+                url = ("https://i.scdn.co/image/"
+                       "ab6761610000517458efbed422ab46484466822b")
+            else:
+                print("Error!", response, "\n")
+                url = None
+                retries += 1
     return url
 
 
