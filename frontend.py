@@ -41,5 +41,5 @@ st.write(
 st.markdown(
     "<span style='color:red;'> ⚠️ Disclaimer: The data can contain some bad "
     "words and inappropriate names, since it's the name of the musics and "
-    "artists, so be aware of that. </span>"
+    "artists, so be aware of that. </span>", unsafe_allow_html=True
 )
