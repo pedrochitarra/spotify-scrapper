@@ -5,7 +5,8 @@
 
 <h3 align="center">Spotify Scrapper</h3>
 
-<p align="center"> Project aimed to learn web scraping techniques and data extraction from the Spotify platform.
+<p align="center"> Project aimed to learn web scraping techniques, data extraction from the Spotify platform and
+    data visualization using Streamlit.
     <br> 
 </p>
 
