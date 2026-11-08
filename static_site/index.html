@@ -1,1 +1,40 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Spotify Showcase</title><link rel="stylesheet" href="styles.css"><script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js"></script></head><body><div id="app"><header><div class="brand"><span>♫</span><b>Spotify</b> Showcase <small>Brazil listening data</small></div><nav><button :class="{active:page==='home'}" @click="page='home'">Home</button><button :class="{active:page==='cities'}" @click="page='cities'">Cities</button><a class="full" href="streamlit/" title="Full Streamlit app (slower to load)">Full app ↗</a></nav></header><main v-if="ready"><section v-if="page==='home'"><p class="eyebrow">SNAPSHOT {{ data.snapshot }}</p><h1>What Brazil is streaming</h1><p class="lead">A lightweight view of Brazil's music pulse, built from the latest collection.</p><div class="grid stats"><article v-for="(value,key) in data.stats" class="card"><strong>{{ value.toLocaleString('pt-BR') }}</strong><span>{{ key }}</span></article></div><div class="card hero"><h2>City pulse</h2><p>{{ data.cities.length }} cities with current Last.fm charts.</p><button class="primary" @click="page='cities'">Explore cities →</button></div></section><section v-else><p class="eyebrow">LAST.FM CITY CHARTS</p><h1>City pulse</h1><p class="lead">Artist affinity calculated from current metro top tracks.</p><select v-model="selected"><option v-for="city in data.cities" :value="city.id">{{ city.name }}</option></select><div class="card" v-if="city"><h2>{{ city.name }}</h2><div class="ranking"><div v-for="(artist,i) in city.artists" class="rank"><b>{{ i+1 }}</b><span>{{ artist.name }} <small>{{ artist.tracks }} tracks</small></span><strong>{{ artist.score }}</strong></div></div></div></section></main><p v-else class="loading">Carregando dados…</p></div><script src="app.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#07140e">
+  <title>Spotify Showcase</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎧</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preload" href="home.json" as="fetch" crossorigin>
+  <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js"></script>
+</head>
+<body>
+  <div id="app" v-cloak>
+    <header class="top">
+      <div class="top-in">
+        <a class="brand" href="#/"><span>♫</span><b>Spotify</b>&nbsp;Showcase</a>
+        <nav>
+          <a v-for="n in nav" :key="n.page" :href="link(n.page)"
+             :class="{active: route.page === n.page}">{{ n.label }}</a>
+          <a class="full" href="streamlit/" title="Full Streamlit app (slower to load)">Streamlit ↗</a>
+        </nav>
+      </div>
+    </header>
+    <main>
+      <div v-if="snapshots.length > 1 && route.page !== 'compare'" class="pills snap">
+        <a v-for="s in snapshots" :key="s" :href="link(route.page, {...route.params, snap: s})"
+           :class="{active: snap === s}">{{ label(s) }}</a>
+      </div>
+      <component :is="view" :key="route.key"></component>
+    </main>
+    <p class="foot">Educational project, not affiliated with Spotify. Data: Spotify Web API,
+      kworb.net, Last.fm. Names come straight from Spotify and may contain explicit words.</p>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
