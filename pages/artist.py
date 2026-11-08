@@ -1,259 +1,145 @@
-"""Page to show the artist's information."""
+"""Artist page: ?id=<spotify artist id>"""
 import streamlit as st
-import sqlite3
-from geopy.geocoders import Nominatim
-from geopy.exc import GeocoderUnavailable
 
-import pandas as pd
+from src.utils import streamlit_utils as ui
 
+coleta = ui.snapshot_switch()
+other = ui.other_coleta(coleta)
+artist_id = ui.selected_id()
 
-st.title('Artists')
+if not artist_id:
+    ui.title("Artists", "Pick one, or use Search · " + ui.coleta_badge(coleta))
+    top = ui.query(
+        "SELECT a.art_codigo, a.art_primeironome, a.art_ultimonome, "
+        "a.art_seguidores, i.image_url FROM art_artista a "
+        "LEFT JOIN artists_images i ON i.art_codigo = a.art_codigo "
+        "WHERE a.coleta = ?1 AND a.art_codigo IN (SELECT afx_art_codigo "
+        "FROM afx_artistafaixa WHERE coleta = ?1) "
+        "ORDER BY a.art_popularidade DESC LIMIT 24", (coleta,))
+    ui.tiles(top, "pick", "artist", "art_codigo",
+             lambda r: ui.tile_html(
+                 r.image_url,
+                 ui.artist_name(r.art_primeironome, r.art_ultimonome),
+                 f"{ui.number(r.art_seguidores)} followers",
+                 round_image=True))
+    st.stop()
 
-# Connect to the database
-conn = sqlite3.connect('data/spotify.db')
-cursor = conn.cursor()
+found = ui.query(
+    "SELECT a.*, i.image_url FROM art_artista a LEFT JOIN artists_images i "
+    "ON i.art_codigo = a.art_codigo WHERE a.art_codigo = ? AND a.coleta = ?",
+    (artist_id, coleta))
+if found.empty:
+    ui.note(f"This artist is not in the {ui.coleta_label(coleta)} snapshot. "
+            "Try the other one in the switch above.")
+    st.stop()
+info = found.iloc[0]
+name = ui.artist_name(info["art_primeironome"], info["art_ultimonome"])
 
-# Get the artists
-cursor.execute("""SELECT art_codigo, art_primeironome, art_ultimonome
-               FROM art_artista;""")
+previous = ui.query(
+    "SELECT art_seguidores, art_popularidade FROM art_artista "
+    "WHERE art_codigo = ? AND coleta = ?", (artist_id, other)) \
+    if other else None
+prev = previous.iloc[0] if previous is not None and not previous.empty \
+    else None
 
-# cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+genres = ui.query(
+    "SELECT DISTINCT g.gen_nome FROM age_artistagenero ag JOIN gen_genero g "
+    "ON g.gen_codigo = ag.age_gen_codigo WHERE ag.age_art_codigo = ? "
+    "AND ag.coleta = ?", (artist_id, coleta))["gen_nome"]
+playlists = ui.query(
+    "SELECT COUNT(DISTINCT apy_ply_codigo) n FROM apy_artistaplaylist "
+    "WHERE apy_art_codigo = ? AND coleta = ?", (artist_id, coleta)).iloc[0, 0]
 
-artists = cursor.fetchall()
-# st.write(artists)
+hero_stats = [
+    ("Followers", ui.number(info["art_seguidores"])),
+    ("Popularity", "—" if info["art_popularidade"] is None
+     else int(info["art_popularidade"])),
+    ("Viral city playlists", playlists),
+]
+if info["art_ouvintes"] is not None and info["art_ouvintes"] == \
+        info["art_ouvintes"]:
+    hero_stats.append(("Monthly listeners", ui.number(info["art_ouvintes"])))
+meta = ui.coleta_badge(coleta)
+if prev is not None:
+    meta += (f" &nbsp; popularity {ui.delta_html(ui.delta(info['art_popularidade'], prev['art_popularidade']))}"
+             f" · followers {ui.delta_html(ui.delta(info['art_seguidores'], prev['art_seguidores']))}"
+             f" since {ui.coleta_label(other)}")
+ui.hero(info["image_url"], "Artist", name, meta, hero_stats,
+        round_image=True)
+if len(genres):
+    st.html(f"<div style='margin-top:14px'>"
+            f"{ui.chips(g.title() for g in genres)}</div>")
 
-# Select the artist
-artist = st.selectbox(
-    'Select an artist', artists,
-    format_func=lambda x: x[1] + " " + x[2] if x[2] else x[1])
+left, right = st.columns([3, 2], gap="large")
+with left:
+    tracks = ui.query(
+        "SELECT f.fai_codigo, i.image_url, f.fai_nome, f.fai_popularidade, "
+        "f.fai_duracao, (SELECT COUNT(*) FROM fxp_faixaplaylist p WHERE "
+        "p.fxp_fai_codigo = f.fai_codigo AND p.coleta = f.coleta) playlists "
+        "FROM afx_artistafaixa x JOIN fai_faixa f ON f.fai_codigo = "
+        "x.afx_fai_codigo AND f.coleta = x.coleta LEFT JOIN faixas_images i "
+        "ON i.fai_codigo = f.fai_codigo WHERE x.afx_art_codigo = ? "
+        "AND x.coleta = ? ORDER BY f.fai_popularidade DESC LIMIT 10",
+        (artist_id, coleta))
+    ui.section("Popular", "tracks in the playlists and charts")
+    if tracks.empty:
+        ui.note("No tracks of this artist were collected in this snapshot.")
+    ui.rows(tracks, "a_tracks", "track", "fai_codigo",
+            lambda i, r: ui.row_html(
+                i, r.image_url, r.fai_nome,
+                f"{r.playlists} playlists · {ui.duration(r.fai_duracao)}",
+                ui.pop_bar(r.fai_popularidade)))
+with right:
+    ui.section("Listen")
+    ui.spotify_embed("artist", artist_id, height=380)
 
-# Get the artist's info
-cursor.execute(f"""SELECT *
-                FROM art_artista art
-                INNER JOIN artists_images art_img
-                ON art.art_codigo = art_img.art_codigo
-                WHERE art.art_codigo = '{artist[0]}';""")
-artist_info = cursor.fetchone()
+albums = ui.query(
+    "SELECT b.alb_codigo, i.image_url, b.alb_nome, b.alb_tipo, "
+    "SUBSTR(b.alb_lancamento, 1, 4) year FROM aal_artistaalbum aa "
+    "JOIN alb_album b ON b.alb_codigo = aa.aal_alb_codigo AND b.coleta = "
+    "aa.coleta LEFT JOIN albums_images i ON i.alb_codigo = b.alb_codigo "
+    "WHERE aa.aal_art_codigo = ? AND aa.coleta = ? "
+    "ORDER BY b.alb_lancamento DESC LIMIT 12", (artist_id, coleta))
+if not albums.empty:
+    ui.section("Discography")
+    ui.tiles(albums, "a_albums", "album", "alb_codigo",
+             lambda r: ui.tile_html(r.image_url, r.alb_nome,
+                                    f"{r.year} · {ui.esc(r.alb_tipo)}"))
 
-artist_genre_info = cursor.execute(
-    f"""
-    WITH numbered_gen_genero AS (
-        SELECT
-            gen_nome,
-            ROW_NUMBER() OVER () AS gen_num
-        FROM gen_genero
-    )
-    SELECT gen_nome from numbered_gen_genero
-    INNER JOIN age_artistagenero
-    ON numbered_gen_genero.gen_num = age_artistagenero.age_gen_codigo
-    INNER JOIN art_artista
-    ON age_artistagenero.age_art_codigo = art_artista.art_codigo
-    WHERE age_art_codigo = '{artist[0]}';
-    """).fetchall()
-artist_genres = [genre[0] for genre in artist_genre_info]
+similar = ui.query(
+    "SELECT a.art_codigo, i.image_url, a.art_primeironome, "
+    "a.art_ultimonome, s.aa_similaridade, s.aa_fonte FROM aa_artistaartista s "
+    "JOIN art_artista a ON a.art_codigo = s.aa_art_b_codigo AND a.coleta = "
+    "s.coleta LEFT JOIN artists_images i ON i.art_codigo = a.art_codigo "
+    "WHERE s.aa_art_a_codigo = ? AND s.coleta = ? "
+    "ORDER BY s.aa_similaridade DESC NULLS LAST, a.art_popularidade DESC "
+    "LIMIT 12", (artist_id, coleta))
+if not similar.empty:
+    source = ("Last.fm" if similar["aa_fonte"].iloc[0] == "lastfm"
+              else "Spotify related artists (retired in 2024)")
+    ui.section("Fans also like", source)
+    ui.tiles(similar, "a_similar", "artist", "art_codigo",
+             lambda r: ui.tile_html(
+                 r.image_url,
+                 ui.artist_name(r.art_primeironome, r.art_ultimonome),
+                 f"{r.aa_similaridade:.0%} similar"
+                 if r.aa_similaridade == r.aa_similaridade
+                 and r.aa_similaridade is not None else "Related",
+                 round_image=True))
 
-st.header("Artist Info")
-
-image_artist_col, text_info_col = st.columns(2)
-
-artist_image = None
-artist_image = artist_info[7]
-
-if artist_image is None:
-    artist_image = ("https://i.scdn.co/image/"
-                    "ab6761610000517458efbed422ab46484466822b")
-
-with image_artist_col:
-    st.image(artist_image, width=300, use_column_width="auto")
-
-with text_info_col:
-    artist_full_name = (artist_info[1] + " " + artist_info[2] if
-                        artist_info[2] else artist_info[1])
-    st.subheader(artist_full_name)
-    formatted_followers = "{:,}".format(artist_info[3])
-    st.metric("Followers", formatted_followers)
-    st.metric("Popularity (from 100)", artist_info[4])
-    formatted_listeners = "{:,}".format(artist_info[5])
-    st.metric("Listeners", formatted_listeners)
-    st.subheader("Genres")
-    for genre in artist_genres:
-        st.write(genre.capitalize())
-
-st.subheader("Cities with the most listeners")
-cities = cursor.execute(
-    f"""
-    WITH numbered_cid_cidade AS (
-        SELECT
-            *, ROW_NUMBER() OVER () AS cid_num
-            FROM cid_cidade
-    )
-    SELECT cid_nome, cid_pais, cid_regiao, arc_ouvintes FROM
-    numbered_cid_cidade
-    INNER JOIN arc_artistacidade
-    ON numbered_cid_cidade.cid_num = arc_artistacidade.arc_cid_codigo
-    INNER JOIN art_artista
-    ON art_artista.art_codigo = arc_artistacidade.arc_art_codigo
-    WHERE art_artista.art_codigo = '{artist[0]}'
-    """).fetchall()
-
-
-def get_geolocation(city_name: str):
-    """Get the geolocation (latitude and longitude) of a city.
-
-    Args:
-        city_name (str): The name of the city.
-
-    Returns:
-        Nominatim.location: The location of the city.
-    """
-    geolocator = Nominatim(user_agent="Geopy Library")
-    location = geolocator.geocode(city_name)
-    return location
-
-
-cities_df = pd.DataFrame(
-    cities, columns=["City", "Country", "Region", "Listeners"])
-
-with st.spinner("Getting the geolocation of the cities..."):
-    cities_df["latitude"] = None
-    cities_df["longitude"] = None
-
-    for i, city in cities_df.iterrows():
-        # st.write(city)
-        retries = 0
-        geolocation_valid = False
-        city_name = f"{city['City'], city['Region'], city['Country']}"
-        while retries < 3 and not geolocation_valid:
-            # Retry 3 times to get the geolocation. If it fails, skip the city
-            try:
-                local = get_geolocation(city_name)
-                cities_df.at[i, "latitude"] = local.latitude
-                cities_df.at[i, "longitude"] = local.longitude
-                geolocation_valid = True
-            except (AttributeError, GeocoderUnavailable):
-                retries += 1
-
-    cities_df_show_case = pd.DataFrame()
-    cities_df_show_case["City"] = cities_df.apply(
-        lambda x: f"{x['City']}, {x['Region']}, {x['Country']}", axis=1)
-    cities_df_show_case["Listeners"] = cities_df["Listeners"]
-    st.dataframe(cities_df_show_case, hide_index=True)
-
-    # Normalize to 100 the listeners
-    cities_df["Listeners"] = (100_000 * cities_df["Listeners"] /
-                              cities_df["Listeners"].max())
-    # Before plotting, drop the cities with no geolocation
-    cities_df = cities_df.dropna(subset=["latitude", "longitude"])
-    if cities_df.empty:
-        st.error("No geolocation was found for the cities")
-    else:
-        st.map(cities_df, size="Listeners", use_container_width=True)
-
-st.subheader("Top tracks")
-top_tracks = cursor.execute(
-    f"""
-    SELECT ff.fai_codigo, ff.fai_nome, ff.fai_popularidade, ff.fai_reproducoes,
-    faixas_images.image_url
-    FROM fai_faixa ff
-    INNER JOIN afx_artistafaixa
-    ON afx_artistafaixa.afx_fai_codigo = ff.fai_codigo
-    INNER JOIN art_artista
-    ON art_artista.art_codigo = afx_artistafaixa.afx_art_codigo
-    INNER JOIN faixas_images
-    ON ff.fai_codigo = faixas_images.fai_codigo
-    WHERE afx_artistafaixa.afx_art_codigo = '{artist[0]}'
-    ORDER BY ff.fai_popularidade DESC
-    LIMIT 5;
-    """).fetchall()
-
-top_tracks_df = pd.DataFrame(top_tracks,
-                             columns=["ID", "Track", "Popularity (from 100)",
-                                      "Plays", "Image"])
-
-st.data_editor(
-    top_tracks_df,
-    column_config={
-        "ID": None,
-        "Image": st.column_config.ImageColumn("")
-    },
-    column_order=["Image", "Track", "Popularity (from 100)", "Plays"],
-    hide_index=True,
-    use_container_width=True
-)
-
-st.subheader("Top albums")
-top_albums = cursor.execute(
-    f"""
-    SELECT alb.alb_codigo, alb.alb_nome, alb.alb_popularidade,
-    albums_images.image_url
-    FROM alb_album alb
-    INNER JOIN aal_artistaalbum
-    ON aal_artistaalbum.aal_alb_codigo = alb.alb_codigo
-    INNER JOIN art_artista
-    ON art_artista.art_codigo = aal_artistaalbum.aal_art_codigo
-    INNER JOIN albums_images
-    ON alb.alb_codigo = albums_images.alb_codigo
-    WHERE aal_artistaalbum.aal_art_codigo = '{artist[0]}'
-    ORDER BY alb_popularidade DESC
-    LIMIT 5;
-    """).fetchall()
-top_albums_df = pd.DataFrame(
-    top_albums, columns=["ID", "Album", "Popularity (from 100)", "Image"])
-
-st.data_editor(
-    top_albums_df,
-    column_config={
-        "ID": None,
-        "Image": st.column_config.ImageColumn("")
-    },
-    column_order=["Image", "Album", "Popularity (from 100)"],
-    hide_index=True,
-    use_container_width=True
-)
-
-# Get related artists
-st.subheader("Related artists")
-st.write("Tip: since there are many artists, you can refresh the page to "
-         "get new random artists if you want to see more beyond the most "
-         "popular ones")
-
-order_by_popularity = st.checkbox("Order by popularity", value=False)
-order_query = None
-if order_by_popularity:
-    order_query = "art.art_popularidade DESC"
-else:
-    order_query = "RANDOM()"
-
-related_artists = cursor.execute(
-    f"""
-    SELECT art.art_codigo, art.art_primeironome, art.art_ultimonome,
-    art.art_popularidade, art_img.image_url
-    FROM art_artista art
-    INNER JOIN artists_images art_img
-    ON art.art_codigo = art_img.art_codigo
-    WHERE art.art_codigo IN (
-        SELECT aa_art_b_codigo
-        FROM aa_artistaartista
-        WHERE aa_art_a_codigo = '{artist[0]}'
-    )
-    ORDER BY {order_query}
-    LIMIT 5;
-    """).fetchall()
-
-related_artists_df = pd.DataFrame(
-    related_artists, columns=["ID", "First Name", "Last Name",
-                              "Popularity (from 100)", "Image"])
-related_artists_df["Artist"] = related_artists_df.apply(
-    lambda x: x["First Name"] + " " + x["Last Name"] if x["Last Name"] else
-    x["First Name"], axis=1)
-
-st.data_editor(
-    related_artists_df,
-    column_config={
-        "ID": None,
-        "Image": st.column_config.ImageColumn("")
-    },
-    column_order=["Image", "Artist", "Popularity (from 100)"],
-    hide_index=True,
-    use_container_width=True
-)
+cities = ui.query(
+    "SELECT c.cid_nome, c.cid_regiao, c.cid_pais, r.arc_ouvintes "
+    "FROM arc_artistacidade r JOIN cid_cidade c ON c.cid_codigo = "
+    "r.arc_cid_codigo WHERE r.arc_art_codigo = ? AND r.coleta = ? "
+    "ORDER BY r.arc_ouvintes DESC LIMIT 10", (artist_id, coleta))
+if not cities.empty:
+    ui.section("Where people listen", "monthly listeners by city")
+    top_listeners = cities["arc_ouvintes"].max() or 1
+    st.html("".join(
+        f"<div class='row' style='grid-template-columns:34px minmax(0,1fr) "
+        f"auto'><div class='n'>{i}</div><div><div class='t'>"
+        f"{ui.esc(r.cid_nome)}</div><div class='s'>{ui.esc(r.cid_regiao)}, "
+        f"{ui.esc(r.cid_pais)}</div></div><div class='r'><b>"
+        f"{ui.number(r.arc_ouvintes)}</b><span class='pop'><i style='width:"
+        f"{100 * r.arc_ouvintes / top_listeners:.0f}%'></i></span></div></div>"
+        for i, r in enumerate(cities.itertuples(), 1)))

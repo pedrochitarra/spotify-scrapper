@@ -1,5 +1,13 @@
 [logger]
-
-# Level of logging: 'error', 'warning', 'info', or 'debug'.
-# Default: 'info'
 level = "info"
+
+[theme]
+base = "dark"
+primaryColor = "#1ed760"
+backgroundColor = "#121212"
+secondaryBackgroundColor = "#1f1f1f"
+textColor = "#f2f2f2"
+font = "sans serif"
+
+[client]
+toolbarMode = "minimal"

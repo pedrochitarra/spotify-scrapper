@@ -17,52 +17,50 @@ Welcome to the Spotify Scraper repository, an educational resource designed to p
 
 <span style="color:red;"> ⚠️ Disclaimer: The data can contain some bad words and inappropriate names, since it's the name of the musics and artists, so be aware of that. </span>
 
-## 🏁 Getting Started <a name = "getting_started"></a>
-The following link provide access to the official documentation for the Spotify Web API, which is the primary resource used to access and retrieve data from the Spotify platform. The documentation provides a comprehensive overview of the API's capabilities, including the various endpoints and methods available for accessing and retrieving data from the Spotify platform.
+## 📅 Snapshots
+The database keeps every collection side by side, identified by the `coleta`
+column (`YYYY-MM`) present in every table:
 
-- [Spotify Web API Documentation](https://developer.spotify.com/documentation/web-api/tutorials/getting-started)
+| Snapshot | Sources | Notes |
+|---|---|---|
+| `2023-11` (archive) | Spotify Web API, unofficial web player endpoints, editorial playlists | Has plays per track, listeners per city and Spotify related artists. |
+| `2026-11` | Spotify Web API, [kworb.net](https://kworb.net/spotify/country/br_daily.html) Top 200 Brazil, [Last.fm](https://www.last.fm/api) similar artists | Spotify retired related artists and editorial playlist access for new apps in 2024; plays and city listeners are no longer collected. |
 
-In this repository, you will find a collection of Python scripts and accompanying documentation that demonstrate various methods for scraping data from Spotify's web interface. Whether you're a beginner looking to explore the fundamentals of web scraping or an experienced developer seeking to enhance your skills, this repository aims to provide clear examples and explanations to aid your learning journey.
+The app has a snapshot selector and an overview comparing artists present in both.
 
-I'm assuming here that you have a basic understanding of Python and web scraping, also
-that you have an access token from Spotify API. If you don't have one, you can get it [here](https://developer.spotify.com/documentation/web-api/concepts/access-token).
+## 🏁 Getting Started
+1. Install the dependencies: `pip install -r requirements.txt`
+2. Create a Spotify app at the [developer dashboard](https://developer.spotify.com/dashboard)
+   (Web API, redirect URI `http://127.0.0.1:8888/callback`) and, optionally, a
+   [Last.fm API account](https://www.last.fm/api/account/create).
+3. Create `credentials.json` in the project root (ignored by git):
 
-It's important to note that while web scraping can be a powerful tool for data acquisition, it's essential to adhere to Spotify's terms of service and usage policies. This repository encourages responsible scraping practices and respects Spotify's guidelines regarding data access and usage. Also this repository is for educational purposes only, and the scripts provided are intended to be used as learning tools to explore the process of web scraping and data extraction.
+```json
+{
+  "client_id": "...",
+  "client_secret": "...",
+  "lastfm_api_key": "...",
+  "spotify_keys": [{"client_id": "...", "client_secret": "..."}]
+}
+```
 
-Whether you're interested in building your own music recommendation system, conducting research on music trends, or simply curious about the process of web scraping, this repository provides a valuable resource to help you get started.
+`spotify_keys` is optional: extra keys are used when the first one gets rate
+limited. Since July 2026 Spotify counts quota per developer account, so only
+keys from different accounts add capacity.
 
-Happy scraping, and enjoy exploring the world of music data with Spotify Scraper!
+4. Collect: `python main.py` (current month) or `python main.py --coleta 2026-11`.
+   Every step only fetches what is missing, so after an error run it again to resume.
+   `--steps` runs specific steps, `--discography` also fetches every artist's albums.
+5. Optional, once: `python -m src.geocode` stores city coordinates for the map.
+6. Run the app: `streamlit run frontend.py`
 
-Since I'm Brazilian, I'm going to gather the playlists of the musics most listened to in Brazil and the cities where the artists are most listened to. There's a group of playlists for a large amount of cities called Top 50 - City Name, from Sound of Cities user. I'm going to gather all the playlists from this user and save the information in a database.
+## 📜 Structure
+- `main.py`: command line entry point for the collection.
+- `src/clients.py`: Spotify, Last.fm and kworb clients with retries, backoff and key rotation.
+- `src/collect.py`: collection steps (playlists, playlist tracks, charts, tracks, albums, artists, similar artists, artist/playlist counts).
+- `src/db.py`: SQLite schema and migration of the 2023 data.
+- `frontend.py`, `pages/`: Streamlit app.
+- `data/spotify.db`: the database. `data/*.sql`: original 2023 PostgreSQL dumps.
 
-An important thing to note that's all the connections with database are made
-to a PostgreSQL database, but to showcase in Streamlit I'm using a SQLite database, since there's not a lot of data to showcase.
-
-## 📜 Scripts <a name = "scripts"></a>
-The following is a list of the scripts available in this repository, along with a brief description of each script's purpose and functionality.
-
-- `main.py`: This script calls the other scripts to gather data from Spotify's web interface. It provides a high-level overview of the scraping process and demonstrates how to access and retrieve data from Spotify's platform.
-
-- `get_album_info.py`: This script demonstrates how to extract data from a specific album on Spotify. It provides examples of how to access and retrieve information about an album, including its name, release date, and tracklist.
-
-    - `save_albums_info()`: This function demonstrates how to save the information of a list of albums in database.
-
-- `get_artist_info.py`: This script demonstrates how to extract data from a specific artist on Spotify. It provides examples of how to access and retrieve information about an artist, including their name, popularity, and top tracks.
-
-    - `get_insta_followers_livecounts_nl()`: This function demonstrates how to get the number of followers of an artist on Instagram.
-    - `get_insta_followers_instrack()`: This function demonstrates how to get the number of followers of an artist on Instagram.
-    - `get_insta_followers_tucktools()`: This function demonstrates how to get the number of followers of an artist on Instagram.
-    - `extract_socialmedia_followers()`: This function demonstrates how to get the number of followers of an artist on many social medias.
-    - `save_socials_info()`: This function demonstrates how to save the information of the artist's social medias.
-    - `save_social_media_followers()`: This function demonstrates how to save the number of followers of an artist on many social medias.
-    - `save_genres_info()`: This function demonstrates how to save the genres of an artist and by consequence of the platform.
-    - `save_cities_info()`: This function demonstrates how to save the cities where the artist is most listened to and by consequence of the platform.
-    - `save_artists_info()`: This function demonstrates how to save the information of a list of artists in database.
-    - `save_related_artists_info()`: This function demonstrates how to save the related artists of an artist in database.
-
-- `get_playlist_info.py`: This script demonstrates how to extract data from a specific playlist on Spotify. It provides examples of how to access and retrieve information about a playlist, including its name, description, and tracklist.
-  - `save_playlists_info()`: This function demonstrates how to save the information of a list of playlists in database. The selected playlists are from Brazil and many cities in Brazil most listened to.
-
-- `get_track_info.py`: This script demonstrates how to extract data from a specific track on Spotify. It provides examples of how to access and retrieve information about a track, including its name, duration, and popularity.
-    - `insert_artist_playlist()`: This function demonstrates how to insert the relation between an artist and a playlist in database.
-    - `save_tracks_info()`: This function demonstrates how to save the information of a list of tracks in database.
+This repository is for educational purposes; respect the
+[Spotify Developer Terms](https://developer.spotify.com/terms).

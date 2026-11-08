@@ -1,2 +1,5 @@
 *.json
-__pycache__
+!.devcontainer/*.json
+__pycache__/
+*.db-journal
+_site/
