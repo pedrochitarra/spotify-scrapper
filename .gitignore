@@ -3,3 +3,4 @@
 __pycache__/
 *.db-journal
 _site/
+data/spotify.db

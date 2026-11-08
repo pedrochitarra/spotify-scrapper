@@ -1,5 +1,5 @@
-# Publish the app on GitHub Pages: stlite runs Streamlit in the browser, so
-# the site is static.
+# Publish the site on GitHub Pages: the fast Vue frontend at the root and the
+# full Streamlit app (stlite, Streamlit in the browser) under /streamlit/.
 name: Pages
 
 on:
@@ -28,6 +28,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: python scripts/build_pages.py
+      - run: python scripts/build_static.py
       - uses: actions/configure-pages@v5
         with:
           enablement: true

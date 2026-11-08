@@ -6,6 +6,9 @@
   unpacks it on start
 - 404.html is a copy of index.html so page routes open the app
 
+Output goes to _site/streamlit/; the fast Vue site (build_static.py) is the
+root of the site.
+
 Usage: python scripts/build_pages.py   (then: python -m http.server -d _site)
 """
 import gzip
@@ -17,7 +20,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SITE = ROOT / "_site"
+SITE = ROOT / "_site" / "streamlit"
 STLITE = "1.12.0"
 DB = ROOT / "data" / "spotify.db"
 WEB_DB = "data/spotify.db.gz"
@@ -145,7 +148,7 @@ def slim_database(target: Path):
 def main():
     if SITE.exists():
         shutil.rmtree(SITE)
-    SITE.mkdir()
+    SITE.mkdir(parents=True)
     for f in FILES:
         (SITE / f).parent.mkdir(parents=True, exist_ok=True)
         if f == WEB_DB:
@@ -159,7 +162,6 @@ def main():
             .replace("__CONFIG__", json.dumps(CONFIG)))
     (SITE / "index.html").write_text(html, encoding="utf-8")
     (SITE / "404.html").write_text(html, encoding="utf-8")
-    (SITE / ".nojekyll").write_text("")
     total = sum(p.stat().st_size for p in SITE.rglob("*") if p.is_file())
     print(f"{len(FILES)} files, {total / 1e6:.1f} MB in {SITE}")
 

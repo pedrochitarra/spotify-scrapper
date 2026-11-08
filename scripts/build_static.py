@@ -10,6 +10,12 @@ ROOT = Path(__file__).resolve().parent.parent
 DB = ROOT / "data" / "spotify.db"
 OUT = ROOT / "_site"
 
+NOT_FOUND = r"""<!doctype html><meta charset="utf-8"><script>
+const m = location.pathname.match(/^(.*?\/)streamlit\/([^/]+)\/?$/);
+location.replace(m ? m[1] + "streamlit/?page=" + m[2] : location.pathname.replace(/\/streamlit\/.*$|\/[^/]*$/, "/"));
+</script>"""
+
+
 def main():
     source = DB
     temp = None
@@ -31,6 +37,10 @@ def main():
     (OUT / "index.html").write_text((ROOT / "static_site" / "index.html").read_text(encoding="utf-8"), encoding="utf-8")
     (OUT / "app.js").write_text((ROOT / "static_site" / "app.js").read_text(encoding="utf-8"), encoding="utf-8")
     (OUT / "styles.css").write_text((ROOT / "static_site" / "styles.css").read_text(encoding="utf-8"), encoding="utf-8")
+    (OUT / ".nojekyll").write_text("")
+    # GitHub Pages serves only the root 404.html: send Streamlit routes
+    # (/streamlit/artist) to the Streamlit app, anything else to the home
+    (OUT / "404.html").write_text(NOT_FOUND, encoding="utf-8")
     conn.close()
     if temp:
         shutil.rmtree(temp.parent)
