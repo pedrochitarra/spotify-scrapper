@@ -178,3 +178,13 @@ iframe.embed { width: 100%; border: 0; border-radius: 12px; display: block; }
   .city-rank { grid-template-columns: 32px minmax(0,1fr) 50px; }
   .city-rank .tr { display: none; }
 }
+
+/* city search */
+.city-search { position: relative; max-width: 460px; margin-bottom: 18px; }
+.city-results { position: absolute; z-index: 5; left: 0; right: 0; top: calc(100% + 6px); max-height: 360px; overflow-y: auto;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 14px; padding: 6px; box-shadow: 0 18px 48px rgba(0,0,0,.5); }
+.city-results button { display: flex; justify-content: space-between; width: 100%; font: inherit; font-weight: 700; text-align: left;
+  border: 0; background: none; color: var(--text); padding: 9px 12px; border-radius: 9px; cursor: pointer; }
+.city-results button:hover { background: var(--surface-3); }
+.city-results small { color: var(--muted); font-weight: 500; }
+.city-results .none { color: var(--muted); padding: 9px 12px; }

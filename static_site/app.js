@@ -245,7 +245,15 @@ const Cities = page({
         selected.value = String((d.find((c) => c.name === "São Paulo") || d[0] || {}).id);
     });
     const city = computed(() => state.data?.find((c) => String(c.id) === String(selected.value)));
-    return { state, selected, city };
+    // Accent-insensitive filter of the city list ("sao" finds São Paulo)
+    const term = ref("");
+    const fold = (t) => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+    const matches = computed(() => {
+      const t = fold(term.value.trim());
+      return t ? (state.data || []).filter((c) => fold(c.name).includes(t)) : [];
+    });
+    const pick = (c) => { selected.value = String(c.id); term.value = ""; };
+    return { state, selected, city, term, matches, pick };
   },
   template: `<div>
     <p class="title">City pulse</p>
@@ -254,7 +262,13 @@ const Cities = page({
     <Loading v-else-if="!state.data"/>
     <div v-else-if="!state.data.length" class="note">No Last.fm city charts have been collected for this snapshot yet.</div>
     <template v-else>
-      <select v-model="selected"><option v-for="c in state.data" :value="String(c.id)">{{ c.name }} · {{ c.n_tracks }} tracks</option></select>
+      <div class="city-search">
+        <input class="search" v-model="term" :placeholder="'Search ' + state.data.length + ' cities…'" @keydown.enter="matches[0] && pick(matches[0])">
+        <div v-if="term.trim()" class="city-results">
+          <button v-for="c in matches.slice(0, 12)" :key="c.id" @click="pick(c)">{{ c.name }} <small>{{ c.n_tracks }} tracks</small></button>
+          <div v-if="!matches.length" class="none">No city matches “{{ term }}”.</div>
+        </div>
+      </div>
       <template v-if="city">
         <Stats :items="[['Artists ranked', thousands(city.n_artists), 'Last.fm chart artists'], ['Tracks ranked', thousands(city.n_tracks), 'current metro chart']]"/>
         <div class="cols c32">
