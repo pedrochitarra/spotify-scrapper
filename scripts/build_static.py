@@ -1,13 +1,14 @@
 """Build the fast Vue frontend into _site/ (the root of the GitHub Pages site).
 
 The pages that everyone opens first (home, Top 200, cities) come as JSON
-computed here, so they show up at once. Artist, album, track, search and
+computed here, so they show up at once; each city has its own small file. Artist, album, track, search and
 "then vs now" query the database in the browser with sql.js, using the
 gzipped copy that build_pages.py puts in _site/streamlit/data/.
 
 Usage: python scripts/build_pages.py && python scripts/build_static.py
 """
 import gzip
+import hashlib
 import json
 import shutil
 import sqlite3
@@ -114,29 +115,57 @@ def charts(conn, snap):
     return out
 
 
+# A city's playlist is "Viral <city> BR"
+CITY_PLAYLIST = ("JOIN ply_playlist pl ON pl.ply_nome = 'Viral ' || c.cid_nome "
+                 "|| ' BR' AND pl.coleta = c.coleta")
+
+
 def cities(conn, snap):
-    out = []
-    for code, name in conn.execute(
-            "SELECT cid_codigo, cid_nome FROM cid_cidade WHERE coleta = ? "
-            "ORDER BY cid_nome", (snap,)).fetchall():
+    """Index of the cities with a Viral playlist, and one file per city."""
+    index = rows(conn,
+        "SELECT c.cid_codigo id, c.cid_nome name, c.cid_regiao region, "
+        "pl.ply_codigo playlist, COUNT(x.fxp_fai_codigo) tracks "
+        "FROM cid_cidade c "
+        f"{CITY_PLAYLIST} JOIN fxp_faixaplaylist x "
+        "ON x.fxp_ply_codigo = pl.ply_codigo AND x.coleta = pl.coleta "
+        "WHERE c.coleta = ? GROUP BY c.cid_codigo ORDER BY c.cid_nome",
+        (snap,))
+    # In how many cities each artist is: few cities = a local favorite
+    reach = dict(conn.execute(
+        "SELECT arc_art_codigo, COUNT(*) FROM arc_artistacidade "
+        "WHERE coleta = ? GROUP BY arc_art_codigo", (snap,)).fetchall())
+    details = {}
+    for city in index:
+        playlist = city.pop("playlist")
+        artists = rows(conn,
+            "SELECT a.art_codigo id, TRIM(a.art_primeironome || ' ' || "
+            "a.art_ultimonome) name, i.image_url img, p.apy_quantidade "
+            "tracks, a.art_popularidade pop FROM apy_artistaplaylist p "
+            "JOIN art_artista a ON a.art_codigo = p.apy_art_codigo "
+            "AND a.coleta = p.coleta LEFT JOIN artists_images i "
+            "ON i.art_codigo = a.art_codigo WHERE p.coleta = ? "
+            "AND p.apy_ply_codigo = ? ORDER BY p.apy_quantidade DESC, "
+            "a.art_popularidade DESC", (snap, playlist))
+        for a in artists:
+            a["cities"] = reach.get(a["id"], 1)
+        local = sorted((a for a in artists if a["cities"] < len(index) / 4),
+                       key=lambda a: (a["cities"], -a["tracks"],
+                                      -(a["pop"] or 0)))[:6]
         tracks = rows(conn,
-            "SELECT lfm_faixa t, lfm_artista a FROM lfm_city_track_chart "
-            "WHERE coleta = ? AND cid_codigo = ? ORDER BY lfm_posicao LIMIT 20",
-            (snap, code))
-        if not tracks:
-            continue
-        total = conn.execute(
-            "SELECT COUNT(DISTINCT lfm_artista), COUNT(*) FROM "
-            "lfm_city_track_chart WHERE coleta = ? AND cid_codigo = ?",
-            (snap, code)).fetchone()
-        artists = [[a, s, t] for a, s, t in conn.execute(
-            "SELECT lfm_artista, lfm_score, lfm_faixas FROM "
-            "lfm_artist_city_score WHERE coleta = ? AND cid_codigo = ? "
-            "ORDER BY lfm_score DESC LIMIT 30", (snap, code))]
-        out.append({"id": code, "name": name, "n_artists": total[0],
-                    "n_tracks": total[1], "artists": artists,
-                    "tracks": [[r["t"], r["a"]] for r in tracks]})
-    return out
+            "SELECT f.fai_codigo id, f.fai_nome name, i.image_url img, "
+            f"f.fai_popularidade pop, {ARTISTS} FROM fxp_faixaplaylist x "
+            "JOIN fai_faixa f ON f.fai_codigo = x.fxp_fai_codigo "
+            "AND f.coleta = x.coleta LEFT JOIN faixas_images i "
+            "ON i.fai_codigo = f.fai_codigo LEFT JOIN afx_artistafaixa ax "
+            "ON ax.afx_fai_codigo = f.fai_codigo AND ax.coleta = f.coleta "
+            "LEFT JOIN art_artista a ON a.art_codigo = ax.afx_art_codigo "
+            "AND a.coleta = f.coleta WHERE x.coleta = ? "
+            "AND x.fxp_ply_codigo = ? GROUP BY f.fai_codigo "
+            "ORDER BY f.fai_popularidade DESC LIMIT 20", (snap, playlist))
+        city["artists"] = len(artists)
+        details[city["id"]] = {"artists": artists[:20], "local": local,
+                               "tracks": tracks}
+    return index, details
 
 
 def write_json(name, payload):
@@ -165,12 +194,22 @@ def main():
     write_json("home.json", data)
     for s in snaps:
         write_json(f"charts-{s}.json", charts(conn, s))
-        write_json(f"cities-{s}.json", cities(conn, s))
+        index, details = cities(conn, s)
+        write_json(f"cities-{s}.json", index)
+        (OUT / "city" / s).mkdir(parents=True, exist_ok=True)
+        for code, detail in details.items():
+            write_json(f"city/{s}/{code}.json", detail)
     conn.close()
     if temp:
         shutil.rmtree(temp.parent)
     for f in SRC.iterdir():
         shutil.copy2(f, OUT / f.name)
+    # Version the assets so browsers do not keep an old app.js after a deploy
+    page = (OUT / "index.html").read_text(encoding="utf-8")
+    for asset in ("app.js", "styles.css"):
+        version = hashlib.md5((OUT / asset).read_bytes()).hexdigest()[:8]
+        page = page.replace(f'"{asset}"', f'"{asset}?v={version}"')
+    (OUT / "index.html").write_text(page, encoding="utf-8")
     (OUT / ".nojekyll").write_text("")
     (OUT / "404.html").write_text(NOT_FOUND, encoding="utf-8")
     sizes = {p.name: p.stat().st_size // 1024 for p in OUT.glob("*.json")}

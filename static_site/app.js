@@ -245,6 +245,15 @@ const Cities = page({
         selected.value = String((d.find((c) => c.name === "São Paulo") || d[0] || {}).id);
     });
     const city = computed(() => state.data?.find((c) => String(c.id) === String(selected.value)));
+    // One small file per city, loaded when it is picked (kept in the URL)
+    const detail = reactive({ data: null, err: null });
+    watch(city, (c) => {
+      if (!c) return;
+      history.replaceState(null, "", link("cities", { city: c.id }));
+      detail.data = null;
+      json(`city/${snap.value}/${c.id}.json`).then((d) => { if (city.value === c) detail.data = d; })
+        .catch((e) => (detail.err = String(e.message || e)));
+    });
     // Accent-insensitive filter of the city list ("sao" finds São Paulo)
     const term = ref("");
     const fold = (t) => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -253,32 +262,45 @@ const Cities = page({
       return t ? (state.data || []).filter((c) => fold(c.name).includes(t)) : [];
     });
     const pick = (c) => { selected.value = String(c.id); term.value = ""; };
-    return { state, selected, city, term, matches, pick };
+    return { state, selected, city, detail, term, matches, pick };
   },
   template: `<div>
     <p class="title">City pulse</p>
-    <p class="sub" v-html="'Current Last.fm metro charts · ' + badge(snap)"></p>
+    <p class="sub" v-html="'What each city has in its Spotify Viral playlist · ' + badge(snap)"></p>
     <Err v-if="state.err" :err="state.err"/>
     <Loading v-else-if="!state.data"/>
-    <div v-else-if="!state.data.length" class="note">No Last.fm city charts have been collected for this snapshot yet.</div>
+    <div v-else-if="!state.data.length" class="note">No Viral city playlists in this snapshot.</div>
     <template v-else>
       <div class="city-search">
         <input class="search" v-model="term" :placeholder="'Search ' + state.data.length + ' cities…'" @keydown.enter="matches[0] && pick(matches[0])">
         <div v-if="term.trim()" class="city-results">
-          <button v-for="c in matches.slice(0, 12)" :key="c.id" @click="pick(c)">{{ c.name }} <small>{{ c.n_tracks }} tracks</small></button>
+          <button v-for="c in matches.slice(0, 12)" :key="c.id" @click="pick(c)">{{ c.name }} <small>{{ c.region }}</small></button>
           <div v-if="!matches.length" class="none">No city matches “{{ term }}”.</div>
         </div>
       </div>
       <template v-if="city">
-        <Stats :items="[['Artists ranked', thousands(city.n_artists), 'Last.fm chart artists'], ['Tracks ranked', thousands(city.n_tracks), 'current metro chart']]"/>
-        <div class="cols c32">
-          <div><Sec small="artist affinity from the current Last.fm chart">{{ city.name }}</Sec>
-            <div v-if="!city.artists.length" class="note">Last.fm returned no artist ranking for this city.</div>
-            <div v-else class="city-ranking"><div v-for="(a, i) in city.artists" class="city-rank">
-              <span class="p">{{ i + 1 }}</span><div class="nm">{{ a[0] }}</div><span class="tr">{{ a[2] }} tracks</span><b>{{ Math.round(a[1]) }}</b></div></div></div>
-          <div><Sec small="the raw Last.fm signal">Top tracks</Sec>
-            <Row v-for="(t, i) in city.tracks" :key="i" :n="i + 1" :img="false" :title="t[0]" :sub="esc(t[1])"/></div>
-        </div>
+        <p class="title" style="font-size:clamp(1.6rem,4vw,2.4rem)">{{ city.name }} <span class="sub" style="font-size:1rem">{{ city.region }}</span></p>
+        <div style="height:12px"></div>
+        <Stats :items="[['Tracks', thousands(city.tracks), 'in the Viral ' + city.name + ' playlist'], ['Artists', thousands(city.artists), 'with a track in the playlist']]"/>
+        <div v-if="snap !== snapshots[0]" class="note">The Viral city playlists stopped being updated in May 2024, so this is what was viral in {{ city.name }} then.</div>
+        <Err v-if="detail.err" :err="detail.err"/>
+        <Loading v-else-if="!detail.data"/>
+        <template v-else>
+          <template v-if="detail.data.local.length">
+            <Sec small="in this playlist and in few other cities">Local favorites</Sec>
+            <div class="tiles"><Tile v-for="a in detail.data.local" :key="a.id" :img="a.img" :title="a.name" round
+              :sub="a.cities === 1 ? 'only here' : 'in ' + a.cities + ' cities'" :to="link('artist', {id: a.id})"/></div>
+          </template>
+          <div class="cols">
+            <div><Sec small="most tracks in the playlist">Top artists</Sec>
+              <Row v-for="(a, i) in detail.data.artists" :key="a.id" :n="i + 1" :img="a.img" :title="a.name" round
+                :sub="a.cities === 1 ? 'only in ' + city.name : 'viral in ' + a.cities + ' cities'"
+                :right="'<b>' + a.tracks + '</b> ' + (a.tracks === 1 ? 'track' : 'tracks')" :to="link('artist', {id: a.id})"/></div>
+            <div><Sec small="by Spotify popularity">Tracks</Sec>
+              <Row v-for="(t, i) in detail.data.tracks" :key="t.id" :n="i + 1" :img="t.img" :title="t.name" :sub="esc(t.artists)"
+                :right="popBar(t.pop)" :to="link('track', {id: t.id})"/></div>
+          </div>
+        </template>
       </template>
     </template></div>`,
 });

@@ -168,23 +168,6 @@ class Lastfm:
         return [(a["name"], float(a["match"]))
                 for a in body.get("similarartists", {}).get("artist", [])]
 
-    def top_tracks(self, country: str, location: str, limit: int = 100) -> list:
-        """Return Last.fm's current metro chart as normalized track rows."""
-        response = _request(self._session, "GET", self.API, params={
-            "method": "geo.gettoptracks", "country": country,
-            "location": location, "limit": limit, "api_key": self._key,
-            "format": "json"})
-        body = response.json() if response.ok else {}
-        if "error" in body or not response.ok:
-            log.warning("Last.fm has no city chart for %s, %s", location,
-                        country)
-            return []
-        rows = body.get("tracks", {}).get("track", [])
-        return [{"artist": (r.get("artist") or {}).get("name"),
-                 "track": r.get("name"), "position": i,
-                 "playcount": int(r.get("listeners") or 0)}
-                for i, r in enumerate(rows, 1) if (r.get("artist") or {}).get("name")]
-
 
 # Daily and weekly pages have different columns; these exist in both.
 KWORB_REQUIRED = {"Pos", "Streams", "Total"}

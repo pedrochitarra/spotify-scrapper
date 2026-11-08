@@ -19,7 +19,7 @@ from src.clients import Lastfm, SourceError, Spotify, load_credentials, \
     spotify_keys
 
 STEPS = ["playlists", "playlist_tracks", "charts", "tracks", "albums",
-         "artists", "similar", "counts", "city_charts"]
+         "artists", "similar", "counts"]
 
 log = logging.getLogger("main")
 
@@ -44,8 +44,6 @@ def run(coleta: str, steps: list, discography: bool):
         "similar": lambda: collect.similar_artists(conn, lastfm, coleta)
         if lastfm else log.warning("No lastfm_api_key, skipping similar"),
         "counts": lambda: collect.artist_playlist_counts(conn, coleta),
-        "city_charts": lambda: collect.lastfm_city_charts(conn, lastfm, coleta)
-        if lastfm else log.warning("No lastfm_api_key, skipping city charts"),
     }
     for step in steps:
         log.info("== %s ==", step)

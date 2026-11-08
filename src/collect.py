@@ -336,40 +336,6 @@ def artist_playlist_counts(conn: sqlite3.Connection, coleta: str):
     conn.commit()
 
 
-def lastfm_city_charts(conn: sqlite3.Connection, lastfm: Lastfm,
-                       coleta: str):
-    """Collect current Last.fm metro charts and aggregate artist affinity."""
-    cities = conn.execute(
-        "SELECT cid_codigo, cid_nome FROM cid_cidade WHERE coleta = ?",
-        (coleta,)).fetchall()
-    for city_code, city_name in cities:
-        done = conn.execute(
-            "SELECT COUNT(*) FROM lfm_city_track_chart WHERE coleta = ? "
-            "AND cid_codigo = ?", (coleta, city_code)).fetchone()[0]
-        if done:
-            continue
-        rows = lastfm.top_tracks("Brazil", city_name)
-        now = datetime.datetime.utcnow().replace(microsecond=0).isoformat()
-        db.upsert(conn, "lfm_city_track_chart", [{
-            "coleta": coleta, "cid_codigo": city_code,
-            "lfm_artista": r["artist"], "lfm_faixa": r["track"],
-            "lfm_posicao": r["position"],
-            "lfm_listeners": r["playcount"], "lfm_consultado_em": now}
-            for r in rows], [])
-        conn.commit()
-        log.info("Last.fm city %s: %d tracks", city_name, len(rows))
-
-    conn.execute("DELETE FROM lfm_artist_city_score WHERE coleta = ?",
-                 (coleta,))
-    conn.execute(
-        "INSERT INTO lfm_artist_city_score "
-        "SELECT coleta, cid_codigo, lfm_artista, "
-        "SUM(101 - lfm_posicao), COUNT(*) "
-        "FROM lfm_city_track_chart WHERE coleta = ? "
-        "GROUP BY coleta, cid_codigo, lfm_artista", (coleta,))
-    conn.commit()
-
-
 def _save_image(conn: sqlite3.Connection, table: str, key: str, obj: dict):
     url = _image(obj)
     if url:

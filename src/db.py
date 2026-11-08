@@ -56,24 +56,11 @@ CREATE TABLE IF NOT EXISTS col_coleta (
     col_fim TEXT,
     col_observacao TEXT
 );
-CREATE TABLE IF NOT EXISTS lfm_city_track_chart (
-    coleta TEXT NOT NULL,
-    cid_codigo INTEGER NOT NULL,
-    lfm_artista TEXT NOT NULL,
-    lfm_faixa TEXT NOT NULL,
-    lfm_posicao INTEGER NOT NULL,
-    lfm_listeners INTEGER,
-    lfm_consultado_em TEXT NOT NULL,
-    PRIMARY KEY (coleta, cid_codigo, lfm_artista, lfm_faixa)
-);
-CREATE TABLE IF NOT EXISTS lfm_artist_city_score (
-    coleta TEXT NOT NULL,
-    cid_codigo INTEGER NOT NULL,
-    lfm_artista TEXT NOT NULL,
-    lfm_score INTEGER NOT NULL,
-    lfm_faixas INTEGER NOT NULL,
-    PRIMARY KEY (coleta, cid_codigo, lfm_artista)
-);
+-- Last.fm geo.gettoptracks ignores the city and returns the country chart,
+-- so these per-city tables only held copies of it. Cities now come from the
+-- Viral city playlists.
+DROP TABLE IF EXISTS lfm_city_track_chart;
+DROP TABLE IF EXISTS lfm_artist_city_score;
 """
 
 EXTRA_COLUMNS = {

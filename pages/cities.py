@@ -1,56 +1,87 @@
-"""Current Last.fm city affinity rankings."""
+"""Cities: what each city has in its Viral playlist ("Viral <city> BR")."""
 import streamlit as st
 
 from src.utils import streamlit_utils as ui
 
 coleta = ui.snapshot_switch()
-ui.title("City pulse", "Current Last.fm metro charts · " + ui.coleta_badge(coleta))
+ui.title("City pulse", "What each city has in its Spotify Viral playlist · "
+         + ui.coleta_badge(coleta))
 
 cities = ui.query(
-    "SELECT c.cid_codigo, c.cid_nome, COUNT(t.lfm_faixa) tracks "
-    "FROM cid_cidade c LEFT JOIN lfm_city_track_chart t "
-    "ON t.cid_codigo = c.cid_codigo AND t.coleta = c.coleta "
-    "WHERE c.coleta = ? GROUP BY c.cid_codigo ORDER BY c.cid_nome",
-    (coleta,))
+    "SELECT c.cid_codigo, c.cid_nome, c.cid_regiao, p.ply_codigo, "
+    "COUNT(x.fxp_fai_codigo) tracks FROM cid_cidade c JOIN ply_playlist p "
+    "ON p.ply_nome = 'Viral ' || c.cid_nome || ' BR' AND p.coleta = c.coleta "
+    "JOIN fxp_faixaplaylist x ON x.fxp_ply_codigo = p.ply_codigo "
+    "AND x.coleta = p.coleta WHERE c.coleta = ? GROUP BY c.cid_codigo "
+    "ORDER BY c.cid_nome", (coleta,))
 if cities.empty:
-    ui.note("No Last.fm city charts have been collected for this snapshot yet.")
+    ui.note("No Viral city playlists in this snapshot.")
     st.stop()
 
-labels = cities.apply(
-    lambda r: f"{r.cid_nome} · {int(r.tracks)} tracks", axis=1).tolist()
-choice = st.selectbox("City", labels, label_visibility="collapsed")
-city_id = int(cities.iloc[labels.index(choice)].cid_codigo)
-city_name = cities.iloc[labels.index(choice)].cid_nome
+# The selectbox can be typed into, so it doubles as the city search
+labels = (cities["cid_nome"] + " · " + cities["cid_regiao"].fillna("")).tolist()
+default = next((i for i, n in enumerate(cities["cid_nome"])
+                if n == "São Paulo"), 0)
+choice = st.selectbox("City", labels, index=default,
+                      placeholder="Search a city", label_visibility="collapsed")
+city = cities.iloc[labels.index(choice)]
+playlist = city.ply_codigo
 
-summary = ui.query(
-    "SELECT COUNT(DISTINCT lfm_artista) artists, "
-    "COUNT(*) tracks FROM lfm_city_track_chart "
-    "WHERE coleta = ? AND cid_codigo = ?", (coleta, city_id)).iloc[0]
+if coleta == max(ui.coletas()):
+    ui.note("The Viral city playlists stopped being updated in May 2024, so "
+            f"this is what was viral in {ui.esc(city.cid_nome)} then.")
+
+artists = ui.query(
+    "SELECT a.art_codigo, TRIM(a.art_primeironome || ' ' || "
+    "a.art_ultimonome) name, i.image_url, p.apy_quantidade tracks, "
+    "(SELECT COUNT(*) FROM arc_artistacidade r WHERE r.arc_art_codigo = "
+    "a.art_codigo AND r.coleta = a.coleta) cities FROM apy_artistaplaylist p "
+    "JOIN art_artista a ON a.art_codigo = p.apy_art_codigo "
+    "AND a.coleta = p.coleta LEFT JOIN artists_images i "
+    "ON i.art_codigo = a.art_codigo WHERE p.coleta = ? "
+    "AND p.apy_ply_codigo = ? "
+    "ORDER BY p.apy_quantidade DESC, a.art_popularidade DESC",
+    (coleta, playlist))
 ui.stats([
-    ("Artists ranked", f"{int(summary.artists):,}", "Last.fm chart artists"),
-    ("Tracks ranked", f"{int(summary.tracks):,}", "current metro chart")])
+    ("Tracks", f"{int(city.tracks):,}",
+     f"in the Viral {ui.esc(city.cid_nome)} playlist"),
+    ("Artists", f"{len(artists):,}", "with a track in the playlist")])
 
-ui.section(city_name, "artist affinity from the current Last.fm chart")
-ranking = ui.query(
-    "SELECT lfm_artista artist, lfm_score score, lfm_faixas tracks "
-    "FROM lfm_artist_city_score WHERE coleta = ? AND cid_codigo = ? "
-    "ORDER BY lfm_score DESC LIMIT 30", (coleta, city_id))
-if ranking.empty:
-    ui.note("Last.fm returned no artist ranking for this city.")
-else:
-    rows = "".join(
-        f"<div class='city-rank'><span class='city-pos'>{i}</span>"
-        f"<div class='city-name'>{ui.esc(r.artist)}</div>"
-        f"<span class='city-tracks'>{int(r.tracks)} tracks</span>"
-        f"<b>{int(r.score)}</b></div>"
-        for i, r in enumerate(ranking.itertuples(index=False), 1))
-    st.html("<div class='city-ranking'>" + rows + "</div>")
+# Local favorites: in this playlist and in few other cities
+local = artists[artists["cities"] < len(cities) / 4].sort_values(
+    ["cities", "tracks"], ascending=[True, False]).head(6)
+if not local.empty:
+    ui.section("Local favorites", "in this playlist and in few other cities")
+    ui.tiles(local, "c_local", "artist", "art_codigo",
+             lambda r: ui.tile_html(
+                 r.image_url, r.name,
+                 "only here" if r.cities == 1 else f"in {r.cities} cities",
+                 round_image=True))
 
-ui.section("Top tracks", "the raw Last.fm signal behind the ranking")
-tracks = ui.query(
-    "SELECT lfm_posicao position, lfm_faixa track, lfm_artista artist "
-    "FROM lfm_city_track_chart WHERE coleta = ? AND cid_codigo = ? "
-    "ORDER BY lfm_posicao LIMIT 20", (coleta, city_id))
-st.dataframe(tracks, hide_index=True, use_container_width=True,
-             column_config={"position": "#", "track": "Track",
-                            "artist": "Artist"})
+left, right = st.columns(2, gap="large")
+with left:
+    ui.section("Top artists", "most tracks in the playlist")
+    ui.rows(artists.head(20), "c_artists", "artist", "art_codigo",
+            lambda i, r: ui.row_html(
+                i, r.image_url, r.name,
+                f"only in {ui.esc(city.cid_nome)}" if r.cities == 1
+                else f"viral in {r.cities} cities",
+                f"<b>{r.tracks}</b> track{'s' if r.tracks != 1 else ''}",
+                round_image=True))
+with right:
+    tracks = ui.query(
+        "SELECT f.fai_codigo, f.fai_nome, i.image_url, f.fai_popularidade, "
+        "GROUP_CONCAT(TRIM(a.art_primeironome || ' ' || a.art_ultimonome), "
+        "', ') artists FROM fxp_faixaplaylist x JOIN fai_faixa f "
+        "ON f.fai_codigo = x.fxp_fai_codigo AND f.coleta = x.coleta "
+        "LEFT JOIN faixas_images i ON i.fai_codigo = f.fai_codigo "
+        "LEFT JOIN afx_artistafaixa ax ON ax.afx_fai_codigo = f.fai_codigo "
+        "AND ax.coleta = f.coleta LEFT JOIN art_artista a "
+        "ON a.art_codigo = ax.afx_art_codigo AND a.coleta = f.coleta "
+        "WHERE x.coleta = ? AND x.fxp_ply_codigo = ? GROUP BY f.fai_codigo "
+        "ORDER BY f.fai_popularidade DESC LIMIT 20", (coleta, playlist))
+    ui.section("Tracks", "by Spotify popularity")
+    ui.rows(tracks, "c_tracks", "track", "fai_codigo",
+            lambda i, r: ui.row_html(i, r.image_url, r.fai_nome,
+                                     ui.esc(r.artists),
+                                     ui.pop_bar(r.fai_popularidade)))
