@@ -1,6 +1,9 @@
 """Build the fast public frontend from the local SQLite snapshot."""
 import json
+import gzip
+import shutil
 import sqlite3
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -8,7 +11,14 @@ DB = ROOT / "data" / "spotify.db"
 OUT = ROOT / "_site"
 
 def main():
-    conn = sqlite3.connect(DB)
+    source = DB
+    temp = None
+    if not source.exists():
+        temp = Path(tempfile.mkdtemp()) / "spotify.db"
+        with gzip.open(ROOT / "data" / "spotify.db.gz", "rb") as src, open(temp, "wb") as dst:
+            shutil.copyfileobj(src, dst)
+        source = temp
+    conn = sqlite3.connect(source)
     snap = conn.execute("select max(col_codigo) from col_coleta").fetchone()[0]
     stats = dict(conn.execute("select 'artists',count(*) from art_artista where coleta=? union all select 'tracks',count(*) from fai_faixa where coleta=? union all select 'albums',count(*) from alb_album where coleta=? union all select 'playlists',count(*) from ply_playlist where coleta=?", (snap, snap, snap, snap)).fetchall())
     cities = []
@@ -21,6 +31,9 @@ def main():
     (OUT / "index.html").write_text((ROOT / "static_site" / "index.html").read_text(encoding="utf-8"), encoding="utf-8")
     (OUT / "app.js").write_text((ROOT / "static_site" / "app.js").read_text(encoding="utf-8"), encoding="utf-8")
     (OUT / "styles.css").write_text((ROOT / "static_site" / "styles.css").read_text(encoding="utf-8"), encoding="utf-8")
+    conn.close()
+    if temp:
+        shutil.rmtree(temp.parent)
     print(f"Static site: {len(cities)} cities, snapshot {snap}")
 
 if __name__ == "__main__": main()
