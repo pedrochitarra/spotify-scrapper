@@ -1,0 +1,1 @@
+const {createApp}=Vue;createApp({data(){return{ready:false,page:'home',data:{},selected:null}},computed:{city(){return this.data.cities?.find(c=>c.id===this.selected)}},async mounted(){this.data=await fetch('data.json').then(r=>r.json());this.selected=this.data.cities[0]?.id;this.ready=true}}).mount('#app');
