@@ -301,13 +301,19 @@ const Search = page({
     const index = load(async () => {
       const d = await json(`search-${snap.value}.json`);
       // Lowercase, accent-free names for matching ("joao" finds João)
-      for (const list of Object.values(d)) for (const r of list) r.key = fold(r[1] + " " + (list === d.tracks ? r[3] : ""));
-      return d;
+      // Tracks also match by artist ("anitta" finds her songs)
+      const keyed = (list, text) => list.map((r) => ({ r, key: fold(text(r)) }));
+      // markRaw: thousands of rows, no need for Vue to watch them
+      return Vue.markRaw({
+        artists: keyed(d.artists, (r) => r[1]),
+        tracks: keyed(d.tracks, (r) => `${r[1]} ${r[3] || ""}`),
+        albums: keyed(d.albums, (r) => r[1]),
+      });
     });
     const results = computed(() => {
       const t = fold(term.value.trim());
       if (!index.data || t.length < 2) return null;
-      const find = (list, n) => { const out = []; for (const r of list) { if (r.key.includes(t)) out.push(r); if (out.length === n) break; } return out; };
+      const find = (list, n) => { const out = []; for (const x of list) { if (x.key.includes(t)) out.push(x.r); if (out.length === n) break; } return out; };
       return {
         artists: find(index.data.artists, 12).map(([id, name, img, followers]) => ({ id, name, img: fullImg(img), followers })),
         tracks: find(index.data.tracks, 10).map(([id, name, img, artists, dur]) => ({ id, name, img: fullImg(img), artists, dur })),
