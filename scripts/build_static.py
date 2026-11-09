@@ -1,9 +1,10 @@
 """Build the fast Vue frontend into _site/ (the root of the GitHub Pages site).
 
-The pages that everyone opens first (home, Top 200, cities) come as JSON
-computed here, so they show up at once; each city has its own small file. Artist, album, track, search and
-"then vs now" query the database in the browser with sql.js, using the
-gzipped copy that build_pages.py puts in _site/streamlit/data/.
+Every page reads JSON computed here, so nothing heavy is downloaded in the
+browser (important on phones): one file for home, charts, the city list,
+"then vs now" and the search index, and one small file per city, artist,
+track and album. It reads the slimmed database that build_pages.py puts in
+_site/streamlit/data/, so both frontends show the same data.
 
 Usage: python scripts/build_pages.py && python scripts/build_static.py
 """
@@ -16,7 +17,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DB = ROOT / "data" / "spotify.db"
+SLIM = ROOT / "_site" / "streamlit" / "data" / "spotify.db.gz"
 OUT = ROOT / "_site"
 SRC = ROOT / "static_site"
 
@@ -27,6 +28,7 @@ const m = location.pathname.match(/^(.*?\/)streamlit\/([^/]+)\/?$/);
 location.replace(m ? m[1] + "streamlit/?page=" + m[2] : location.pathname.replace(/\/streamlit\/.*$|\/[^/]*$/, "/"));
 </script>"""
 
+IMAGE_PREFIX = "https://i.scdn.co/image/"
 ARTISTS = ("GROUP_CONCAT(TRIM(a.art_primeironome || ' ' || "
            "a.art_ultimonome), ', ') artists")
 
@@ -168,6 +170,242 @@ def cities(conn, snap):
     return index, details
 
 
+def compare(conn, old, new):
+    """Then vs now: track profile, release age, genres, arrivals and
+    departures between the oldest and the newest snapshot."""
+    profile = {r["coleta"]: r for r in rows(conn,
+        "SELECT coleta, COUNT(*) tracks, AVG(fai_duracao) / 1000.0 seconds, "
+        "AVG(fai_explicita) explicit, AVG(fai_popularidade) popularity "
+        "FROM fai_faixa WHERE coleta IN (?, ?) GROUP BY coleta", (old, new))}
+    buckets = {s: [0] * 7 for s in (old, new)}
+    for coleta, age, n in conn.execute(
+            "SELECT fa.coleta, CAST(SUBSTR(fa.coleta, 1, 4) AS INTEGER) - "
+            "CAST(SUBSTR(b.alb_lancamento, 1, 4) AS INTEGER), COUNT(*) "
+            "FROM fal_faixaalbum fa JOIN alb_album b ON b.alb_codigo = "
+            "fa.fal_alb_codigo AND b.coleta = fa.coleta WHERE fa.coleta IN "
+            "(?, ?) AND b.alb_lancamento IS NOT NULL GROUP BY 1, 2",
+            (old, new)):
+        if age is None:
+            continue
+        # Same year, 1, 2-3, 4-5, 6-10, 11-20, 20+
+        i = next(i for i, top in enumerate((0, 1, 3, 5, 10, 20, 10 ** 6))
+                 if age <= top)
+        buckets[coleta][i] += n
+    ages = {s: [n / (sum(b) or 1) for n in b] for s, b in buckets.items()}
+    genres = rows(conn,
+        "SELECT g.coleta, g.gen_nome name, COUNT(DISTINCT ag.age_art_codigo) "
+        "artists FROM age_artistagenero ag JOIN gen_genero g ON g.gen_codigo "
+        "= ag.age_gen_codigo AND g.coleta = ag.coleta JOIN "
+        "apy_artistaplaylist p ON p.apy_art_codigo = ag.age_art_codigo "
+        "AND p.coleta = ag.coleta WHERE ag.coleta IN (?, ?) "
+        "GROUP BY g.coleta, g.gen_nome", (old, new))
+    totals = {s: sum(g["artists"] for g in genres if g["coleta"] == s) or 1
+              for s in (old, new)}
+    share = {}
+    for g in genres:
+        share.setdefault(g["name"], {old: 0, new: 0})[g["coleta"]] = \
+            g["artists"] / totals[g["coleta"]]
+    top_genres = sorted(share.items(), key=lambda kv: -max(kv[1].values()))
+    reach = rows(conn,
+        "SELECT p.coleta, p.apy_art_codigo id, TRIM(a.art_primeironome || "
+        "' ' || a.art_ultimonome) name, COUNT(DISTINCT p.apy_ply_codigo) "
+        "playlists, i.image_url img FROM apy_artistaplaylist p JOIN "
+        "art_artista a ON a.art_codigo = p.apy_art_codigo AND a.coleta = "
+        "p.coleta LEFT JOIN artists_images i ON i.art_codigo = "
+        "p.apy_art_codigo WHERE p.coleta IN (?, ?) GROUP BY p.coleta, "
+        "p.apy_art_codigo ORDER BY playlists DESC", (old, new))
+    ids = {s: {r["id"] for r in reach if r["coleta"] == s} for s in (old, new)}
+
+    def moved(here, there):
+        return [{k: r[k] for k in ("id", "name", "playlists", "img")}
+                for r in reach if r["coleta"] == here
+                and r["id"] not in ids[there]][:12]
+
+    return {"old": old, "new": new, "profile": profile, "ages": ages,
+            "genres": top_genres[:12], "arrived": moved(new, old),
+            "gone": moved(old, new)}
+
+
+def group(pairs):
+    out = {}
+    for key, value in pairs:
+        out.setdefault(key, []).append(value)
+    return out
+
+
+def entities(conn, snap, other):
+    """One JSON per artist, track and album of the snapshot, plus the lists
+    of the pick pages and the search index. Everything is read in bulk and
+    joined here: one query per item would take far too long."""
+    def images(table, key):
+        return dict(conn.execute(f"SELECT {key}, image_url FROM {table}"))
+    art_img = images("artists_images", "art_codigo")
+    fai_img = images("faixas_images", "fai_codigo")
+    alb_img = images("albums_images", "alb_codigo")
+
+    artists = {r["art_codigo"]: r for r in rows(conn,
+        "SELECT * FROM art_artista WHERE coleta = ?", (snap,))}
+    for a in artists.values():
+        a["name"] = " ".join(filter(None, (a["art_primeironome"],
+                                           a["art_ultimonome"]))).strip()
+    previous = {code: [p, f] for code, p, f in conn.execute(
+        "SELECT art_codigo, art_popularidade, art_seguidores FROM art_artista "
+        "WHERE coleta = ?", (other,))} if other else {}
+    tracks = {r["fai_codigo"]: r for r in rows(conn,
+        "SELECT * FROM fai_faixa WHERE coleta = ?", (snap,))}
+    albums = {r["alb_codigo"]: r for r in rows(conn,
+        "SELECT * FROM alb_album WHERE coleta = ?", (snap,))}
+
+    track_artists = group((f, a) for a, f in conn.execute(
+        "SELECT afx_art_codigo, afx_fai_codigo FROM afx_artistafaixa "
+        "WHERE coleta = ? ORDER BY afx_principal DESC", (snap,)))
+    artist_tracks = group((a, f) for f, a_list in track_artists.items()
+                          for a in a_list)
+    track_album = dict(conn.execute(
+        "SELECT fal_fai_codigo, fal_alb_codigo FROM fal_faixaalbum "
+        "WHERE coleta = ?", (snap,)))
+    album_tracks = group((b, f) for f, b in track_album.items())
+    album_artists = group(conn.execute(
+        "SELECT aal_alb_codigo, aal_art_codigo FROM aal_artistaalbum "
+        "WHERE coleta = ?", (snap,)))
+    artist_albums = group((a, b) for b, a_list in album_artists.items()
+                          for a in a_list)
+    genres = group(conn.execute(
+        "SELECT DISTINCT ag.age_art_codigo, g.gen_nome FROM "
+        "age_artistagenero ag JOIN gen_genero g ON g.gen_codigo = "
+        "ag.age_gen_codigo AND g.coleta = ag.coleta WHERE ag.coleta = ?",
+        (snap,)))
+    artist_playlists = dict(conn.execute(
+        "SELECT apy_art_codigo, COUNT(DISTINCT apy_ply_codigo) FROM "
+        "apy_artistaplaylist WHERE coleta = ? GROUP BY apy_art_codigo",
+        (snap,)))
+    track_playlists = group(conn.execute(
+        "SELECT x.fxp_fai_codigo, p.ply_nome FROM fxp_faixaplaylist x "
+        "JOIN ply_playlist p ON p.ply_codigo = x.fxp_ply_codigo AND p.coleta "
+        "= x.coleta WHERE x.coleta = ? ORDER BY p.ply_seguidores DESC",
+        (snap,)))
+    similar = group((a, (b, sim, src)) for a, b, sim, src in conn.execute(
+        "SELECT aa_art_a_codigo, aa_art_b_codigo, aa_similaridade, aa_fonte "
+        "FROM aa_artistaartista WHERE coleta = ?", (snap,)))
+    cities = group((a, (name, region, country, listeners))
+                   for a, name, region, country, listeners in conn.execute(
+        "SELECT r.arc_art_codigo, c.cid_nome, c.cid_regiao, c.cid_pais, "
+        "r.arc_ouvintes FROM arc_artistacidade r JOIN cid_cidade c ON "
+        "c.cid_codigo = r.arc_cid_codigo AND c.coleta = r.coleta "
+        "WHERE r.coleta = ?", (snap,)))
+    chart = group((f, (kind, pos, streams, total))
+                  for f, kind, pos, streams, total in conn.execute(
+        "SELECT chr_fai_codigo, chr_tipo, chr_posicao, chr_streams, "
+        "chr_total_streams FROM chr_chart WHERE chr_coleta = ?", (snap,)))
+
+    def score(value):
+        return value if value is not None else -1
+
+    def names(codes):
+        return ", ".join(artists[a]["name"] for a in codes if a in artists)
+
+    def track_row(f):
+        t = tracks[f]
+        return {"id": f, "name": t["fai_nome"], "img": fai_img.get(f),
+                "pop": t["fai_popularidade"], "dur": t["fai_duracao"],
+                "artists": names(track_artists.get(f, [])),
+                "playlists": len(track_playlists.get(f, []))}
+
+    def artist_row(a):
+        return {"id": a, "name": artists[a]["name"], "img": art_img.get(a),
+                "followers": artists[a]["art_seguidores"]}
+
+    def album_row(b):
+        r = albums[b]
+        return {"id": b, "name": r["alb_nome"], "img": alb_img.get(b),
+                "type": r["alb_tipo"],
+                "year": (r["alb_lancamento"] or "")[:4]}
+
+    out = {"artist": {}, "track": {}, "album": {}}
+    # Album pages: albums of the tracks, and the discography the artist
+    # pages show (the full 2023 discographies have 100k+ albums)
+    page_albums = {b for b in album_tracks if b in albums}
+    for code, a in artists.items():
+        mine = sorted((f for f in artist_tracks.get(code, []) if f in tracks),
+                      key=lambda f: -score(tracks[f]["fai_popularidade"]))
+        discography = sorted(
+            (b for b in artist_albums.get(code, []) if b in albums),
+            key=lambda b: albums[b]["alb_lancamento"] or "", reverse=True)[:12]
+        page_albums.update(discography)
+        alike = sorted((s for s in similar.get(code, []) if s[0] in artists),
+                       key=lambda s: (-score(s[1]),
+                                      -score(artists[s[0]]["art_popularidade"])))
+        where = sorted(cities.get(code, []), key=lambda c: -(c[3] or 0))[:10]
+        out["artist"][code] = {
+            "name": a["name"], "img": art_img.get(code),
+            "followers": a["art_seguidores"], "pop": a["art_popularidade"],
+            "listeners": a["art_ouvintes"], "prev": previous.get(code),
+            "genres": [g.title() for g in genres.get(code, [])],
+            "playlists": artist_playlists.get(code, 0),
+            "tracks": [track_row(f) for f in mine[:10]],
+            "albums": [album_row(b) for b in discography],
+            "similar": [{**artist_row(b), "sim": sim}
+                        for b, sim, _ in alike[:12]],
+            "similar_source": alike[0][2] if alike else None,
+            "cities": [{"name": n, "region": r, "country": c, "listeners": n_}
+                       for n, r, c, n_ in where],
+        }
+    for f, t in tracks.items():
+        b = track_album.get(f)
+        out["track"][f] = {
+            "name": t["fai_nome"], "img": fai_img.get(f),
+            "pop": t["fai_popularidade"], "dur": t["fai_duracao"],
+            "explicit": bool(t["fai_explicita"]), "plays": t["fai_reproducoes"],
+            "artists": [artist_row(a) for a in track_artists.get(f, [])
+                        if a in artists],
+            "album": album_row(b) if b in albums else None,
+            "chart": {k: {"pos": p, "streams": s, "total": n}
+                      for k, p, s, n in chart.get(f, [])},
+            "cities": [n.removeprefix("Viral ").removesuffix(" BR")
+                       for n in track_playlists.get(f, [])],
+        }
+    for b in page_albums:
+        r = albums[b]
+        out["album"][b] = {
+            **album_row(b), "date": r["alb_lancamento"],
+            "count": r["alb_qtdmusicas"], "pop": r["alb_popularidade"],
+            "artists": [artist_row(a) for a in album_artists.get(b, [])
+                        if a in artists],
+            "tracks": sorted((track_row(f) for f in album_tracks.get(b, [])
+                              if f in tracks), key=lambda t: -score(t["pop"])),
+        }
+
+    with_tracks = sorted((a for a in artists if a in artist_tracks),
+                         key=lambda a: -score(artists[a]["art_popularidade"]))
+    track_list = sorted(tracks,
+                        key=lambda f: -score(tracks[f]["fai_popularidade"]))
+    album_list = sorted((b for b in album_tracks if b in albums),
+                        key=lambda b: -score(albums[b]["alb_popularidade"]))
+    lists = {
+        "artists": [artist_row(a) for a in with_tracks[:24]],
+        "tracks": [track_row(f) for f in track_list[:30]],
+        "albums": [album_row(b) for b in album_list
+                   if albums[b]["alb_tipo"] == "album"][:24],
+    }
+    # Search index as compact arrays, most popular first; images without
+    # the common prefix (app.js adds it back)
+    def short(url):
+        return url.removeprefix(IMAGE_PREFIX) if url else None
+    search = {
+        "artists": [[a, artists[a]["name"], short(art_img.get(a)),
+                     artists[a]["art_seguidores"]] for a in sorted(
+            artists, key=lambda a: -score(artists[a]["art_popularidade"]))],
+        "tracks": [[f, tracks[f]["fai_nome"], short(fai_img.get(f)),
+                    names(track_artists.get(f, [])), tracks[f]["fai_duracao"]]
+                   for f in track_list],
+        "albums": [[b, albums[b]["alb_nome"], short(alb_img.get(b)),
+                    albums[b]["alb_tipo"],
+                    (albums[b]["alb_lancamento"] or "")[:4]]
+                   for b in album_list],
+    }
+    return out, lists, search
+
+
 def write_json(name, payload):
     (OUT / name).write_text(json.dumps(payload, ensure_ascii=False,
                                        separators=(",", ":")),
@@ -175,15 +413,11 @@ def write_json(name, payload):
 
 
 def main():
-    source = DB
-    temp = None
-    if not source.exists():
-        temp = Path(tempfile.mkdtemp()) / "spotify.db"
-        with gzip.open(ROOT / "data" / "spotify.db.gz", "rb") as src, \
-                open(temp, "wb") as dst:
-            shutil.copyfileobj(src, dst)
-        source = temp
-    conn = sqlite3.connect(source)
+    packed = SLIM if SLIM.exists() else ROOT / "data" / "spotify.db.gz"
+    temp = Path(tempfile.mkdtemp()) / "spotify.db"
+    with gzip.open(packed, "rb") as src, open(temp, "wb") as dst:
+        shutil.copyfileobj(src, dst)
+    conn = sqlite3.connect(temp)
     snaps = [s for (s,) in conn.execute(
         "SELECT col_codigo FROM col_coleta ORDER BY col_codigo")]
     OUT.mkdir(exist_ok=True)
@@ -192,6 +426,8 @@ def main():
             "climbers": climbers(conn, snaps[0], snaps[-1])
             if len(snaps) > 1 else []}
     write_json("home.json", data)
+    if len(snaps) > 1:
+        write_json("compare.json", compare(conn, snaps[0], snaps[-1]))
     for s in snaps:
         write_json(f"charts-{s}.json", charts(conn, s))
         index, details = cities(conn, s)
@@ -199,9 +435,17 @@ def main():
         (OUT / "city" / s).mkdir(parents=True, exist_ok=True)
         for code, detail in details.items():
             write_json(f"city/{s}/{code}.json", detail)
+        other = next((o for o in snaps if o != s), None)
+        pages, lists, search = entities(conn, s, other)
+        write_json(f"lists-{s}.json", lists)
+        write_json(f"search-{s}.json", search)
+        for kind, items in pages.items():
+            (OUT / kind / s).mkdir(parents=True, exist_ok=True)
+            for code, item in items.items():
+                write_json(f"{kind}/{s}/{code}.json", item)
+        print(f"{s}: " + ", ".join(f"{len(v)} {k}s" for k, v in pages.items()))
     conn.close()
-    if temp:
-        shutil.rmtree(temp.parent)
+    shutil.rmtree(temp.parent)
     for f in SRC.iterdir():
         shutil.copy2(f, OUT / f.name)
     # Version the assets so browsers do not keep an old app.js after a deploy
